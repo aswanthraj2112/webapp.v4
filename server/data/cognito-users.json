@@ -1,0 +1,18 @@
+{
+  "testuser": {
+    "id": "test_1759022991375",
+    "username": "testuser",
+    "email": "test@example.com",
+    "createdAt": "2025-09-28T01:29:51.377Z",
+    "isVerified": true,
+    "source": "cognito"
+  },
+  "username": {
+    "id": "cognito_username",
+    "username": "username",
+    "email": "username@example.com",
+    "createdAt": "2025-09-28T01:30:37.599Z",
+    "isVerified": true,
+    "source": "cognito"
+  }
+}

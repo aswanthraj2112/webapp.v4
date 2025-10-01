@@ -1,0 +1,44 @@
+{
+  "name": "video-webapp",
+  "private": true,
+  "version": "1.2.0",
+  "description": "Full-stack video management application with React frontend and Express backend",
+  "homepage": "http://n11817143-videoapp.cab432.com:3000",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aswanthraj2112/webapp.v1.git"
+  },
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm --prefix server run dev\" \"npm --prefix client run dev\"",
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "start": "./start-app.sh",
+    "test": "./test-app.sh",
+    "build": "npm --prefix client run build",
+    "setup": "npm run install:all && cd server && npm run init-db && cd ..",
+    "clean": "rm -rf server/node_modules client/node_modules server/data.sqlite app.log",
+    "health": "curl -s http://n11817143-videoapp.cab432.com:8080/api/health",
+    "logs": "tail -f app.log"
+  },
+  "keywords": [
+    "video",
+    "upload",
+    "streaming",
+    "react",
+    "express",
+    "sqlite",
+    "ffmpeg",
+    "jwt"
+  ],
+  "author": "aswanthraj2112",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.20.0",
+    "npm": ">=10.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.1692.0"
+  }
+}

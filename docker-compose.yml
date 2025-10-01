@@ -1,0 +1,22 @@
+version: "3.9"
+services:
+  backend:
+    build: ./server
+    ports: [ "8080:8080" ]
+    environment:
+      - AWS_REGION=ap-southeast-2
+      - CLIENT_ORIGINS=http://localhost:3000,https://n11817143-videoapp.cab432.com
+      - COGNITO_USER_POOL_ID=ap-southeast-2_CdVnmKfrW
+      - DOMAIN_NAME=n11817143-videoapp.cab432.com
+      - PARAMETER_PREFIX=/n11817143/app/
+      - S3_BUCKET=n11817143-a2
+      - DYNAMO_TABLE=n11817143-VideoApp
+      - ELASTICACHE_ENDPOINT=n11817143-a2-cache.cfg.apse2.cache.amazonaws.com:11211
+  frontend:
+    build: ./client
+    ports: [ "3000:80" ]
+    environment:
+      - VITE_API_URL=http://localhost:8080/api
+      - VITE_AWS_REGION=ap-southeast-2
+    depends_on:
+      - backend
