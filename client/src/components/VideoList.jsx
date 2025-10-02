@@ -80,41 +80,79 @@ function VideoList({ videos, loading, page, limit, total, onPageChange, onSelect
       <ul className="video-grid">
         {videos.map((video) => (
           <li key={video.id} className="video-card">
+            {/* Video thumbnail */}
+            <div className="video-thumbnail">
+              {video.thumbPath ? (
+                <img
+                  src={`/api/videos/${video.id}/stream?variant=thumbnail`}
+                  alt={video.originalName}
+                  className="thumbnail-image"
+                />
+              ) : (
+                <div className="thumbnail-placeholder">
+                  <span>📹</span>
+                </div>
+              )}
+              <div className="duration-overlay">
+                {formatDuration(video.durationSec)}
+              </div>
+            </div>
+
             <div className="video-info">
               <h3 title={video.originalName}>{video.originalName}</h3>
-              <p>Duration: {formatDuration(video.durationSec)}</p>
-              <p>Size: {formatBytes(video.sizeBytes)}</p>
               <p>Status: <span className={`status status-${video.status}`}>{video.status}</span></p>
               {video.status === 'transcoding' && video.transcodingProgress && (
-                <p>Progress: {video.transcodingProgress}%</p>
+                <div className="progress-bar">
+                  <div className="progress-fill" style={{ width: `${video.transcodingProgress}%` }}></div>
+                  <span className="progress-text">{video.transcodingProgress}%</span>
+                </div>
               )}
               {video.transcodedFilename && (
-                <p>✅ Transcoded version available</p>
+                <p className="transcoded-indicator">✅ Transcoded version available</p>
               )}
-              <p>Uploaded: {video.createdAt ? new Date(video.createdAt).toLocaleString() : 'Unknown'}</p>
+              <div className="video-meta">
+                <span>Size: {formatBytes(video.sizeBytes)}</span>
+                <span>Uploaded: {video.createdAt ? new Date(video.createdAt).toLocaleDateString() : 'Unknown'}</span>
+              </div>
             </div>
+
             <div className="video-actions">
-              <button type="button" className="btn" onClick={() => onSelect(video)}>
+              <button type="button" className="btn btn-primary" onClick={() => onSelect(video)}>
                 Play
               </button>
+
               {video.transcodedFilename && (
                 <button type="button" className="btn btn-secondary" onClick={() => onSelect(video, 'transcoded')}>
                   Play HD
                 </button>
               )}
-              <button type="button" className="btn" onClick={() => onDownload(video)}>
-                Download
-              </button>
-              {video.status !== 'transcoding' && !video.transcodedFilename && (
-                <div className="transcode-options">
-                  <button type="button" className="btn btn-primary" onClick={() => onTranscode(video, '720p')}>
-                    Transcode 720p
+
+              {/* Enhanced download options */}
+              <div className="download-options">
+                <button type="button" className="btn btn-outline" onClick={() => onDownload(video, 'original')}>
+                  Download original
+                </button>
+                {video.transcodedFilename && (
+                  <button type="button" className="btn btn-outline" onClick={() => onDownload(video, 'transcoded')}>
+                    Download 720p
                   </button>
-                  <button type="button" className="btn btn-primary" onClick={() => onTranscode(video, '1080p')}>
-                    Transcode 1080p
+                )}
+              </div>
+
+              {/* Enhanced transcoding options */}
+              {video.status !== 'transcoding' && !video.transcodedFilename && (
+                <div className="transcode-section">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => handleTranscode(video, '720p')}
+                    disabled={transcodingVideos.has(video.id)}
+                  >
+                    {transcodingVideos.has(video.id) ? 'Transcoding...' : 'Transcode 720p'}
                   </button>
                 </div>
               )}
+
               <button type="button" className="btn btn-danger" onClick={() => onDelete(video)}>
                 Delete
               </button>

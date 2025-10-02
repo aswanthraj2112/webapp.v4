@@ -133,17 +133,22 @@ function Dashboard({ user, notify }) {
 
   const handleSelect = async (video, variant = 'original') => {
     try {
-      const streamUrl = await api.getStreamUrl(video.id, { variant });
-      setSelectedVideo({ ...video, streamUrl, variant });
+      // Just set the selected video, let VideoPlayer handle stream loading
+      setSelectedVideo({ ...video, selectedVariant: variant });
     } catch (error) {
-      notify(error.message || 'Unable to generate stream URL', 'error');
+      notify(error.message || 'Unable to select video', 'error');
     }
   };
 
-  const handleDownload = async (video) => {
+  const handleDownload = async (video, variant = 'original') => {
     try {
-      const url = await api.getStreamUrl(video.id, { download: true });
-      window.open(url, '_blank');
+      const url = await api.getStreamUrl(video.id, { download: true, variant });
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${video.originalName}_${variant}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     } catch (error) {
       notify(error.message || 'Unable to download video', 'error');
     }
