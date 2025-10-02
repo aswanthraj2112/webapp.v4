@@ -1,9 +1,9 @@
 import ffmpeg from 'fluent-ffmpeg';
 import { S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
-import { Readable } from 'stream';
-import { createWriteStream, createReadStream, unlinkSync, renameSync } from 'fs';
+import { createReadStream, unlinkSync, renameSync, mkdirSync, existsSync } from 'fs';
+import { writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { randomUUID } from 'crypto';
 import config from '../config.js';
 import { AppError } from '../utils/errors.js';
@@ -40,23 +40,51 @@ async function downloadVideoFromS3(s3Key) {
         });
 
         const response = await s3.send(command);
-        const writeStream = createWriteStream(tempFilePath);
-
-        return new Promise((resolve, reject) => {
-            response.Body.pipe(writeStream)
-                .on('finish', () => resolve(tempFilePath))
-                .on('error', reject);
-        });
+        await writeS3BodyToFile(response.Body, tempFilePath);
+        return tempFilePath;
     } catch (error) {
         console.error('Failed to download video from S3:', error);
         throw new AppError('Failed to download video for transcoding', 500);
     }
 }
 
+async function writeS3BodyToFile(body, destinationPath) {
+    if (!body) {
+        throw new AppError('Received empty response when downloading from storage', 500);
+    }
+
+    if (typeof body.transformToByteArray === 'function') {
+        const bytes = await body.transformToByteArray();
+        await writeFile(destinationPath, Buffer.from(bytes));
+        return;
+    }
+
+    if (typeof body.arrayBuffer === 'function') {
+        const buffer = await body.arrayBuffer();
+        await writeFile(destinationPath, Buffer.from(buffer));
+        return;
+    }
+
+    if (Buffer.isBuffer(body) || body instanceof Uint8Array) {
+        await writeFile(destinationPath, Buffer.from(body));
+        return;
+    }
+
+    if (typeof body[Symbol.asyncIterator] !== 'function') {
+        throw new AppError('Unsupported response stream type received from storage', 500);
+    }
+
+    const chunks = [];
+    for await (const chunk of body) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    await writeFile(destinationPath, Buffer.concat(chunks));
+}
+
 /**
  * Upload transcoded video to S3
  */
-async function uploadVideoToS3(filePath, s3Key) {
+export async function uploadVideoToS3(filePath, s3Key, contentType = 'video/mp4') {
     try {
         const fileStream = createReadStream(filePath);
 
@@ -64,7 +92,7 @@ async function uploadVideoToS3(filePath, s3Key) {
             Bucket: config.S3_BUCKET,
             Key: s3Key,
             Body: fileStream,
-            ContentType: 'video/mp4'
+            ContentType: contentType
         });
 
         await s3.send(command);
@@ -84,6 +112,17 @@ async function transcodeVideo(inputPath, outputPath, resolution) {
         throw new AppError(`Unsupported resolution: ${resolution}`, 400);
     }
 
+    // Ensure output directory exists
+    const outputDir = dirname(outputPath);
+    if (!existsSync(outputDir)) {
+        try {
+            mkdirSync(outputDir, { recursive: true });
+        } catch (error) {
+            console.error('Failed to create transcoding output directory:', error);
+            throw new AppError(`Failed to create output directory: ${error.message}`, 500);
+        }
+    }
+
     return new Promise((resolve, reject) => {
         ffmpeg(inputPath)
             .videoCodec('libx264')
@@ -95,7 +134,8 @@ async function transcodeVideo(inputPath, outputPath, resolution) {
             .outputOptions([
                 '-preset fast',
                 '-crf 23',
-                '-movflags +faststart' // Enable streaming
+                '-movflags +faststart', // Enable streaming
+                '-y' // Overwrite output file if it exists
             ])
             .on('start', (commandLine) => {
                 console.log('🎬 Starting transcoding:', commandLine);
@@ -118,17 +158,39 @@ async function transcodeVideo(inputPath, outputPath, resolution) {
 /**
  * Generate thumbnail from video
  */
-async function generateThumbnail(inputPath, outputPath) {
+export async function generateThumbnail(inputPath, outputPath) {
     return new Promise((resolve, reject) => {
+        // Ensure output directory exists
+        const outputDir = dirname(outputPath);
+        if (!existsSync(outputDir)) {
+            try {
+                mkdirSync(outputDir, { recursive: true });
+            } catch (error) {
+                console.error('Failed to create thumbnail output directory:', error);
+                reject(new AppError(`Failed to create output directory: ${error.message}`, 500));
+                return;
+            }
+        }
+
+        console.log(`🖼️ Generating thumbnail: ${inputPath} -> ${outputPath}`);
+
         ffmpeg(inputPath)
             .seekInput(5) // Seek to 5 seconds to avoid black frames
             .frames(1)
             .size('320x240')
             .format('image2')
+            .outputOptions(['-y']) // Overwrite output file if it exists
+            .on('start', (commandLine) => {
+                console.log('🎬 Starting thumbnail generation:', commandLine);
+            })
             .on('end', () => {
+                console.log('✅ Thumbnail generation completed successfully');
                 resolve(outputPath);
             })
-            .on('error', reject)
+            .on('error', (err) => {
+                console.error('❌ Thumbnail generation failed:', err);
+                reject(new AppError(`Thumbnail generation failed: ${err.message}`, 500));
+            })
             .save(outputPath);
     });
 }
@@ -163,12 +225,23 @@ async function getVideoMetadata(filePath) {
  */
 export async function transcodeVideoToResolution({ userId, videoId, originalS3Key, resolution }) {
     const tempDir = tmpdir();
-    const inputFile = join(tempDir, `input-${randomUUID()}.mp4`);
-    const outputFile = join(tempDir, `output-${randomUUID()}.mp4`);
-    const thumbFile = join(tempDir, `thumb-${randomUUID()}.jpg`);
+    const sessionId = randomUUID();
+    const inputFile = join(tempDir, `input-${sessionId}.mp4`);
+    const outputFile = join(tempDir, `output-${sessionId}.mp4`);
+    const thumbFile = join(tempDir, `thumb-${sessionId}.jpg`);
 
     try {
         console.log(`🎬 Starting transcoding for video ${videoId} to ${resolution}`);
+        console.log(`📁 Using temp directory: ${tempDir}`);
+        console.log(`📁 Input file: ${inputFile}`);
+        console.log(`📁 Output file: ${outputFile}`);
+        console.log(`📁 Thumb file: ${thumbFile}`);
+
+        // Ensure temp directory exists and is writable
+        if (!existsSync(tempDir)) {
+            console.log(`📁 Creating temp directory: ${tempDir}`);
+            mkdirSync(tempDir, { recursive: true });
+        }
 
         // Update status to processing
         await updateVideoTranscoding(userId, videoId, {
@@ -200,7 +273,7 @@ export async function transcodeVideoToResolution({ userId, videoId, originalS3Ke
         console.log('📤 Uploading transcoded files to S3...');
         await Promise.all([
             uploadVideoToS3(outputFile, transcodedS3Key),
-            uploadVideoToS3(thumbFile, thumbS3Key)
+            uploadVideoToS3(thumbFile, thumbS3Key, 'image/jpeg')
         ]);
 
         // Update database with transcoded file info

@@ -476,6 +476,13 @@ body {
 
 .transcode-section {
   margin: 0.25rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.transcode-section .btn {
+  font-size: 0.875rem;
 }
 
 /* Enhanced Video Player Modal */

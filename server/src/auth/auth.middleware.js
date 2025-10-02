@@ -47,7 +47,10 @@ const authMiddleware = async (req, res, next) => {
     ? authHeader.slice(7).trim()
     : null;
 
+  console.log(`🔐 AUTH MIDDLEWARE: ${req.method} ${req.url}, hasToken=${!!token}, authHeader=${authHeader ? 'present' : 'missing'}`);
+
   if (!token) {
+    console.log(`🔐 AUTH FAILED: Missing token for ${req.method} ${req.url}`);
     return next(new AuthenticationError('Missing authentication token'));
   }
 
@@ -71,6 +74,7 @@ const authMiddleware = async (req, res, next) => {
     console.log(`🔐 AUTH: userId=${claims.sub}, username=${claims.username}`);
     return next();
   } catch (error) {
+    console.log(`🔐 AUTH ERROR: ${error.message} for ${req.method} ${req.url}`);
     return next(new AuthenticationError('Invalid or expired token'));
   }
 };

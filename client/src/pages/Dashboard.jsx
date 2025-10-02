@@ -49,56 +49,66 @@ function Dashboard({ user, notify }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
 
-  // Polling for transcoding videos
+  // Polling for transcoding videos and general updates
   useEffect(() => {
-    if (transcodingVideos.size === 0) return;
-
     const interval = setInterval(async () => {
-      const updatedVideos = [...videos];
-      let hasChanges = false;
+      // Always reload videos to keep data fresh
+      try {
+        const data = await api.listVideos(page, limit);
+        setVideos(data.items);
+        setTotal(data.total);
 
-      for (const videoId of transcodingVideos) {
-        try {
-          const status = await api.getTranscodingStatus(videoId);
-          const videoIndex = updatedVideos.findIndex(v => v.id === videoId);
+        // Check transcoding status for specific videos
+        if (transcodingVideos.size > 0) {
+          const updatedVideos = [...data.items];
+          let hasChanges = false;
 
-          if (videoIndex !== -1) {
-            updatedVideos[videoIndex] = {
-              ...updatedVideos[videoIndex],
-              status: status.status,
-              transcodingProgress: status.transcodingProgress,
-              transcodedFilename: status.hasTranscodedVersion ? 'transcoded' : null,
-              thumbPath: status.hasThumbnail ? 'thumb' : null
-            };
-            hasChanges = true;
+          for (const videoId of transcodingVideos) {
+            try {
+              const status = await api.getTranscodingStatus(videoId);
+              const videoIndex = updatedVideos.findIndex(v => v.id === videoId);
 
-            // Remove from transcoding set if completed
-            if (status.status !== 'transcoding') {
-              setTranscodingVideos(prev => {
-                const newSet = new Set(prev);
-                newSet.delete(videoId);
-                return newSet;
-              });
+              if (videoIndex !== -1) {
+                updatedVideos[videoIndex] = {
+                  ...updatedVideos[videoIndex],
+                  status: status.status,
+                  transcodingProgress: status.transcodingProgress,
+                  transcodedFilename: status.hasTranscodedVersion ? 'transcoded' : null,
+                  thumbPath: status.hasThumbnail ? 'thumb' : null
+                };
+                hasChanges = true;
 
-              if (status.status === 'transcoded') {
-                notify(`Video transcoding completed!`, 'success');
-              } else if (status.status === 'failed') {
-                notify(`Video transcoding failed`, 'error');
+                // Remove from transcoding set if completed
+                if (status.status !== 'transcoding') {
+                  setTranscodingVideos(prev => {
+                    const newSet = new Set(prev);
+                    newSet.delete(videoId);
+                    return newSet;
+                  });
+
+                  if (status.status === 'transcoded') {
+                    notify(`Video transcoding completed!`, 'success');
+                  } else if (status.status === 'failed') {
+                    notify(`Video transcoding failed`, 'error');
+                  }
+                }
               }
+            } catch (error) {
+              console.error('Failed to get transcoding status:', error);
             }
           }
-        } catch (error) {
-          console.error('Failed to get transcoding status:', error);
-        }
-      }
 
-      if (hasChanges) {
-        setVideos(updatedVideos);
+          if (hasChanges) {
+            setVideos(updatedVideos);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to refresh videos:', error);
       }
     }, 3000); // Poll every 3 seconds
 
     return () => clearInterval(interval);
-  }, [transcodingVideos, videos, notify]);
+  }, [transcodingVideos, page, limit, notify]);
 
   const handleUpload = async (file) => {
     setUploading(true);
@@ -195,7 +205,7 @@ function Dashboard({ user, notify }) {
     <div className="dashboard">
       <section className="welcome">
         <h1>Hello, {user.username}!</h1>
-        <p>Upload videos directly to Amazon S3 and stream them securely.</p>
+        <p>Upload videos to Convert to 720p kick off a Conversion and stream directly from the browser.</p>
       </section>
       <Uploader onUpload={handleUpload} uploading={uploading} />
       <VideoList

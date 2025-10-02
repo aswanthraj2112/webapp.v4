@@ -74,13 +74,39 @@ export async function getJWTSecret() {
         const secret = await getSecret(SECRET_NAME);
 
         if (typeof secret === 'object' && secret) {
-            return secret.JWT_SECRET || null;
+            const jwtSecret = secret.JWT_SECRET;
+            if (jwtSecret) {
+                console.log('JWT Secret loaded: ✅ From Secrets Manager');
+                return jwtSecret;
+            }
         }
 
-        return null;
+        // Try fallback to environment variable
+        const envSecret = process.env.JWT_SECRET;
+        if (envSecret) {
+            console.log('JWT Secret loaded: ⚠️  From Environment Variable');
+            return envSecret;
+        }
+
+        // Generate a temporary secret for development
+        const tempSecret = 'dev-jwt-secret-' + Math.random().toString(36).substring(2);
+        console.log('JWT Secret loaded: ⚠️  Generated Temporary Secret (NOT FOR PRODUCTION)');
+        return tempSecret;
+
     } catch (error) {
         console.error('Failed to retrieve JWT secret:', error.message);
-        return process.env.JWT_SECRET || null;
+
+        // Try environment variable as fallback
+        const envSecret = process.env.JWT_SECRET;
+        if (envSecret) {
+            console.log('JWT Secret loaded: ⚠️  Environment Fallback');
+            return envSecret;
+        }
+
+        // Generate a temporary secret as last resort
+        const tempSecret = 'dev-jwt-secret-' + Math.random().toString(36).substring(2);
+        console.log('JWT Secret loaded: ⚠️  Generated Fallback Secret');
+        return tempSecret;
     }
 }
 

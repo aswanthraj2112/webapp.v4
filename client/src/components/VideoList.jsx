@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import api from '../api.js';
 
 const formatBytes = (bytes) => {
   if (!bytes) return '0 B';
@@ -23,8 +24,30 @@ const formatDuration = (seconds) => {
 
 function VideoList({ videos, loading, page, limit, total, onPageChange, onSelect, onDownload, onDelete, onTranscode }) {
   const [transcodingVideos, setTranscodingVideos] = useState(new Set());
+  const [thumbnailUrls, setThumbnailUrls] = useState({});
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
+
+  // Load thumbnail URLs with authentication
+  useEffect(() => {
+    const loadThumbnails = async () => {
+      const newThumbnailUrls = {};
+      for (const video of videos) {
+        if (video.thumbPath && !thumbnailUrls[video.id]) {
+          try {
+            const url = await api.getStreamUrl(video.id, { variant: 'thumbnail' });
+            newThumbnailUrls[video.id] = url;
+          } catch (error) {
+            console.error(`Failed to load thumbnail for ${video.id}:`, error);
+          }
+        }
+      }
+      if (Object.keys(newThumbnailUrls).length > 0) {
+        setThumbnailUrls(prev => ({ ...prev, ...newThumbnailUrls }));
+      }
+    };
+    loadThumbnails();
+  }, [videos, thumbnailUrls]);
 
   const goToPage = (nextPage) => {
     if (nextPage >= 1 && nextPage <= totalPages) {
@@ -82,13 +105,18 @@ function VideoList({ videos, loading, page, limit, total, onPageChange, onSelect
           <li key={video.id} className="video-card">
             {/* Video thumbnail */}
             <div className="video-thumbnail">
-              {video.thumbPath ? (
+              {video.thumbPath && thumbnailUrls[video.id] ? (
                 <img
-                  src={`/api/videos/${video.id}/stream?variant=thumbnail`}
+                  src={thumbnailUrls[video.id]}
                   alt={video.originalName}
                   className="thumbnail-image"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'flex';
+                  }}
                 />
-              ) : (
+              ) : null}
+              {(!video.thumbPath || !thumbnailUrls[video.id]) && (
                 <div className="thumbnail-placeholder">
                   <span>📹</span>
                 </div>
@@ -149,6 +177,14 @@ function VideoList({ videos, loading, page, limit, total, onPageChange, onSelect
                     disabled={transcodingVideos.has(video.id)}
                   >
                     {transcodingVideos.has(video.id) ? 'Transcoding...' : 'Transcode 720p'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => handleTranscode(video, '1080p')}
+                    disabled={transcodingVideos.has(video.id)}
+                  >
+                    {transcodingVideos.has(video.id) ? 'Transcoding...' : 'Transcode 1080p'}
                   </button>
                 </div>
               )}

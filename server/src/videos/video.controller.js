@@ -72,17 +72,35 @@ export const getVideoStream = async (req, res) => {
   const { variant = 'original' } = req.query;
   const validVariants = ['original', 'transcoded', 'thumbnail'];
 
+  console.log(`🎬 STREAM REQUEST: variant=${variant}, videoId=${req.params.id}, userId=${req.user.sub}`);
+
   if (!validVariants.includes(variant)) {
     return res.status(400).json({ error: `Invalid variant. Must be one of: ${validVariants.join(', ')}` });
   }
 
-  const url = await createStreamUrl({
-    userId: req.user.sub,
-    videoId: req.params.id,
-    variant,
-    download: req.query.download === '1' || req.query.download === 'true'
-  });
-  res.json({ url });
+  try {
+    const url = await createStreamUrl({
+      userId: req.user.sub,
+      videoId: req.params.id,
+      variant,
+      download: req.query.download === '1' || req.query.download === 'true'
+    });
+
+    console.log(`🎬 GENERATED URL: ${url.substring(0, 100)}...`);
+
+    // Set CORS headers for video streaming
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    res.json({ url });
+  } catch (error) {
+    console.error(`🎬 STREAM ERROR:`, error);
+    if (error.name === 'NotFoundError') {
+      return res.status(404).json({ error: error.message });
+    }
+    res.status(500).json({ error: 'Failed to generate stream URL' });
+  }
 };
 
 export const deleteVideo = async (req, res) => {

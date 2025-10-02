@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import api from '../api.js';
 
 function VideoPlayer({ video, onClose }) {
   const [selectedQuality, setSelectedQuality] = useState('original');
@@ -10,7 +11,7 @@ function VideoPlayer({ video, onClose }) {
   // Available quality options
   const qualityOptions = [
     { value: 'original', label: 'Original', available: true },
-    { value: 'transcoded', label: '720p HD', available: !!video?.transcodedFilename }
+    { value: 'transcoded', label: video?.transcodedFilename ? 'HD' : '720p/1080p HD', available: !!video?.transcodedFilename }
   ].filter(option => option.available);
 
   useEffect(() => {
@@ -23,20 +24,25 @@ function VideoPlayer({ video, onClose }) {
     if (!video) return;
 
     setLoading(true);
+    setCurrentStreamUrl(''); // Clear previous URL
     try {
-      const response = await fetch(`/api/videos/${video.id}/stream?variant=${quality}`);
-      if (response.ok) {
-        const data = await response.json();
-        setCurrentStreamUrl(data.url);
+      console.log(`🎬 VideoPlayer: Loading ${quality} for video ${video.id}`);
+      const url = await api.getStreamUrl(video.id, { variant: quality });
+      console.log(`🎬 VideoPlayer: Got URL:`, url);
+
+      // Validate URL
+      if (!url || !url.startsWith('http')) {
+        throw new Error('Invalid URL received from server');
       }
+
+      setCurrentStreamUrl(url);
     } catch (error) {
       console.error('Failed to load video:', error);
+      setCurrentStreamUrl(''); // Ensure URL is cleared on error
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleQualityChange = (newQuality) => {
+  }; const handleQualityChange = (newQuality) => {
     if (videoRef.current) {
       setCurrentTime(videoRef.current.currentTime);
     }
@@ -49,14 +55,17 @@ function VideoPlayer({ video, onClose }) {
     }
   };
 
-  const handleDownloadCurrent = () => {
-    if (currentStreamUrl) {
+  const handleDownloadCurrent = async () => {
+    try {
+      const url = await api.getStreamUrl(video.id, { variant: selectedQuality, download: true });
       const link = document.createElement('a');
-      link.href = currentStreamUrl;
+      link.href = url;
       link.download = `${video.originalName}_${selectedQuality}`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+    } catch (error) {
+      console.error('Failed to download video:', error);
     }
   };
 
@@ -92,7 +101,7 @@ function VideoPlayer({ video, onClose }) {
               type="button"
               className="btn btn-outline"
               onClick={handleDownloadCurrent}
-              disabled={!currentStreamUrl || loading}
+              disabled={loading}
             >
               Download current
             </button>
