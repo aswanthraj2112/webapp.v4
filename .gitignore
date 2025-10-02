@@ -14,6 +14,7 @@ dist/
 build/
 
 # Environment files
+.github
 .env
 .env.local
 .env.production
