@@ -258,8 +258,8 @@ export async function transcodeVideoToResolution({ userId, videoId, originalS3Ke
         const metadata = await getVideoMetadata(inputFile);
 
         // Generate S3 keys for transcoded files
-        const transcodedS3Key = originalS3Key.replace('/raw/', `/transcoded/${resolution}/`);
-        const thumbS3Key = originalS3Key.replace('/raw/', '/thumbs/').replace(/\.[^.]+$/, '.jpg');
+        const transcodedS3Key = originalS3Key.replace('raw/', `transcoded/${resolution}/`);
+        const thumbS3Key = originalS3Key.replace('raw/', 'thumbs/').replace(/\.[^.]+$/, '.jpg');
 
         // Transcode video
         console.log(`🔄 Transcoding to ${resolution}...`);
