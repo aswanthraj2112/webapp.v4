@@ -108,6 +108,14 @@ export async function fetchVideosForUser({ userId, page, limit }) {
   return { total, items: items.map(mapVideo) };
 }
 
+export async function fetchAllVideos({ page, limit }) {
+  // This function requires a new repo method to get all videos
+  // For now, we'll implement it by getting all users' videos
+  const { repoListAllVideos } = await import('./video.repo.js');
+  const { total, items } = await repoListAllVideos(page, limit);
+  return { total, items: items.map(mapVideo) };
+}
+
 export async function fetchVideoMetadata({ userId, videoId }) {
   console.log(`🔍 fetchVideoMetadata: userId=${userId}, videoId=${videoId}`);
   const video = await repoGetVideo(String(userId), videoId);
@@ -241,6 +249,17 @@ async function deleteIfExists(key) {
 }
 
 export async function removeVideoForUser({ userId, videoId }) {
+  const video = await fetchVideoMetadata({ userId, videoId });
+  await Promise.all([
+    deleteIfExists(video.storedFilename),
+    deleteIfExists(video.thumbPath),
+    deleteIfExists(video.transcodedFilename)
+  ]);
+  await repoDeleteVideo(String(userId), videoId);
+}
+
+export async function removeVideoAsAdmin({ userId, videoId }) {
+  // Admin can delete any user's video without ownership check
   const video = await fetchVideoMetadata({ userId, videoId });
   await Promise.all([
     deleteIfExists(video.storedFilename),

@@ -37,6 +37,17 @@ function Dashboard({ user, notify }) {
       const data = await api.listVideos(nextPage, limit);
       setVideos(data.items);
       setTotal(data.total);
+
+      // Initialize transcodingVideos set with any videos that are currently transcoding
+      const currentTranscodingVideos = data.items
+        .filter(video => video.status === 'transcoding')
+        .map(video => video.id);
+
+      if (currentTranscodingVideos.length > 0) {
+        setTranscodingVideos(new Set(currentTranscodingVideos));
+      } else {
+        setTranscodingVideos(new Set());
+      }
     } catch (error) {
       notify(error.message || 'Failed to load videos', 'error');
     } finally {
@@ -49,11 +60,16 @@ function Dashboard({ user, notify }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
 
-  // Polling for transcoding videos and general updates
+  // Polling for transcoding videos only when needed
   useEffect(() => {
+    // Only start polling if there are videos being transcoded
+    if (transcodingVideos.size === 0) {
+      return;
+    }
+
     const interval = setInterval(async () => {
-      // Always reload videos to keep data fresh
       try {
+        // Only reload videos when there are transcoding videos to check
         const data = await api.listVideos(page, limit);
         setVideos(data.items);
         setTotal(data.total);
@@ -105,7 +121,7 @@ function Dashboard({ user, notify }) {
       } catch (error) {
         console.error('Failed to refresh videos:', error);
       }
-    }, 3000); // Poll every 3 seconds
+    }, 5000); // Poll every 5 seconds only when there are transcoding videos
 
     return () => clearInterval(interval);
   }, [transcodingVideos, page, limit, notify]);

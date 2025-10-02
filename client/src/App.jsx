@@ -276,9 +276,7 @@ function App() {
     }
   };
 
-  const canManageUsers = user?.groups?.includes('admins') || user?.groups?.includes('Administrators');
-
-  const toastValue = useMemo(() => notify, [notify]);
+  const canManageUsers = user?.groups?.includes('admin') || user?.groups?.includes('admins') || user?.groups?.includes('Administrators'); const toastValue = useMemo(() => notify, [notify]);
 
   let mainContent;
   if (configError) {

@@ -166,7 +166,13 @@ const api = {
   getAvailableResolutions: () => authorizedRequest('/api/videos/transcoding/resolutions'),
 
   listUsers: () => authorizedRequest('/api/admin/users'),
-  deleteUser: (username) => authorizedRequest(`/api/admin/users/${encodeURIComponent(username)}`, { method: 'DELETE' })
+  deleteUser: (username) => authorizedRequest(`/api/admin/users/${encodeURIComponent(username)}`, { method: 'DELETE' }),
+  listAllVideos: () => authorizedRequest('/api/admin/videos'),
+  deleteAnyVideo: (videoId, userId) => authorizedRequest(`/api/admin/videos/${encodeURIComponent(videoId)}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId })
+  })
 };
 
 export default api;

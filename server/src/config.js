@@ -48,7 +48,7 @@ const config = {
   CACHE_TTL_SECONDS: Number.parseInt(process.env.CACHE_TTL_SECONDS || '60', 10),
 
   // Authorization
-  ADMIN_GROUP: process.env.ADMIN_GROUP || 'admins'
+  ADMIN_GROUP: process.env.ADMIN_GROUP || 'admin'
 };
 
 config.initialize = async function () {

@@ -36,3 +36,8 @@ export async function updateVideoTranscoding(userId, videoId, transcodingData) {
   const repo = await loadRepo();
   return repo.updateVideoTranscoding(userId, videoId, transcodingData);
 }
+
+export async function listAllVideos(page, limit) {
+  const repo = await loadRepo();
+  return repo.listAllVideos(page, limit);
+}

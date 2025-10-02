@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, GetCommand, DeleteCommand, QueryCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand, GetCommand, DeleteCommand, QueryCommand, UpdateCommand, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import { loadDynamoConfig } from '../config.dynamo.js';
 
 const { REGION, TABLE } = await loadDynamoConfig();
@@ -159,4 +159,29 @@ export async function updateVideoTranscoding(userId, videoId, transcodingData) {
     ...transcodingData,
     updatedAt: new Date().toISOString()
   });
+}
+
+export async function listAllVideos(page = 1, limit = 10) {
+  // DynamoDB doesn't support scanning all items efficiently across partitions
+  // For admin purposes, we'll use a scan operation (note: this is expensive for large datasets)
+  const scanLimit = Math.min(limit, 100); // Cap at 100 for performance
+  const startKey = page > 1 ? undefined : undefined; // Simplified pagination
+
+  try {
+    const params = {
+      TableName: TABLE,
+      Limit: scanLimit
+    };
+
+    const result = await ddb.send(new ScanCommand(params));
+    const items = (result.Items || []).map(fromItem);
+
+    return {
+      total: result.Count || 0, // Note: This is not the total count, just current page count
+      items
+    };
+  } catch (error) {
+    console.error('Error scanning all videos:', error);
+    throw error;
+  }
 }
