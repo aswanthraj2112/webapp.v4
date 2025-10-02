@@ -302,3 +302,48 @@ body {
 .admin-table tr:last-child td {
   border-bottom: none;
 }
+
+/* Transcoding specific styles */
+.transcode-options {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+  flex-wrap: wrap;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #2563eb, #1e40af);
+}
+
+.btn-secondary {
+  background: linear-gradient(135deg, #6b7280, #374151);
+  color: white;
+}
+
+.btn-secondary:hover {
+  background: linear-gradient(135deg, #4b5563, #1f2937);
+}
+
+.status-transcoded {
+  color: #22c55e;
+}
+
+/* Progress indicator for transcoding */
+.transcoding-progress {
+  background: rgba(59, 130, 246, 0.2);
+  border-radius: 0.5rem;
+  height: 0.5rem;
+  overflow: hidden;
+  margin: 0.25rem 0;
+}
+
+.transcoding-progress-bar {
+  background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+  height: 100%;
+  transition: width 0.3s ease;
+}

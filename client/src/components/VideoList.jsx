@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 const formatBytes = (bytes) => {
   if (!bytes) return '0 B';
@@ -21,12 +21,27 @@ const formatDuration = (seconds) => {
   return parts.join(':');
 };
 
-function VideoList({ videos, loading, page, limit, total, onPageChange, onSelect, onDownload, onDelete }) {
+function VideoList({ videos, loading, page, limit, total, onPageChange, onSelect, onDownload, onDelete, onTranscode }) {
+  const [transcodingVideos, setTranscodingVideos] = useState(new Set());
+
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
   const goToPage = (nextPage) => {
     if (nextPage >= 1 && nextPage <= totalPages) {
       onPageChange(nextPage);
+    }
+  };
+
+  const handleTranscode = async (video, resolution) => {
+    setTranscodingVideos(prev => new Set([...prev, video.id]));
+    try {
+      await onTranscode(video, resolution);
+    } finally {
+      setTranscodingVideos(prev => {
+        const updated = new Set(prev);
+        updated.delete(video.id);
+        return updated;
+      });
     }
   };
 
@@ -70,15 +85,36 @@ function VideoList({ videos, loading, page, limit, total, onPageChange, onSelect
               <p>Duration: {formatDuration(video.durationSec)}</p>
               <p>Size: {formatBytes(video.sizeBytes)}</p>
               <p>Status: <span className={`status status-${video.status}`}>{video.status}</span></p>
+              {video.status === 'transcoding' && video.transcodingProgress && (
+                <p>Progress: {video.transcodingProgress}%</p>
+              )}
+              {video.transcodedFilename && (
+                <p>✅ Transcoded version available</p>
+              )}
               <p>Uploaded: {video.createdAt ? new Date(video.createdAt).toLocaleString() : 'Unknown'}</p>
             </div>
             <div className="video-actions">
               <button type="button" className="btn" onClick={() => onSelect(video)}>
                 Play
               </button>
+              {video.transcodedFilename && (
+                <button type="button" className="btn btn-secondary" onClick={() => onSelect(video, 'transcoded')}>
+                  Play HD
+                </button>
+              )}
               <button type="button" className="btn" onClick={() => onDownload(video)}>
                 Download
               </button>
+              {video.status !== 'transcoding' && !video.transcodedFilename && (
+                <div className="transcode-options">
+                  <button type="button" className="btn btn-primary" onClick={() => onTranscode(video, '720p')}>
+                    Transcode 720p
+                  </button>
+                  <button type="button" className="btn btn-primary" onClick={() => onTranscode(video, '1080p')}>
+                    Transcode 1080p
+                  </button>
+                </div>
+              )}
               <button type="button" className="btn btn-danger" onClick={() => onDelete(video)}>
                 Delete
               </button>

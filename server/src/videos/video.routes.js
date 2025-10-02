@@ -11,6 +11,11 @@ import {
   getVideoStream,
   deleteVideo
 } from './video.controller.js';
+import {
+  startTranscoding,
+  getTranscodingStatus,
+  getAvailableTranscodingResolutions
+} from './transcoding.controller.js';
 
 const router = express.Router();
 
@@ -28,6 +33,10 @@ const finalizeSchema = z.object({
   contentType: z.string().optional()
 });
 
+const transcodingSchema = z.object({
+  resolution: z.enum(['720p', '1080p'])
+});
+
 router.use(authMiddleware);
 
 router.post('/presign', validateBody(initiateSchema), asyncHandler(createUploadSession));
@@ -36,5 +45,10 @@ router.get('/', asyncHandler(listUserVideos));
 router.get('/:id', asyncHandler(getVideoMetadata));
 router.get('/:id/stream', asyncHandler(getVideoStream));
 router.delete('/:id', asyncHandler(deleteVideo));
+
+// Transcoding routes
+router.get('/transcoding/resolutions', asyncHandler(getAvailableTranscodingResolutions));
+router.post('/:id/transcode', validateBody(transcodingSchema), asyncHandler(startTranscoding));
+router.get('/:id/transcoding-status', asyncHandler(getTranscodingStatus));
 
 export default router;

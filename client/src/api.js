@@ -35,33 +35,38 @@ async function getAccessToken() {
 }
 
 async function authorizedRequest(path, { method = 'GET', body, headers = {} } = {}) {
-  const token = await getAccessToken();
-  const requestHeaders = { ...headers, Authorization: `Bearer ${token}` };
-  let requestBody;
+  try {
+    const token = await getAccessToken();
+    const requestHeaders = { ...headers, Authorization: `Bearer ${token}` };
+    let requestBody;
 
-  if (body instanceof FormData) {
-    requestBody = body;
-  } else if (body !== undefined && body !== null) {
-    requestHeaders['Content-Type'] = 'application/json';
-    requestBody = JSON.stringify(body);
+    if (body instanceof FormData) {
+      requestBody = body;
+    } else if (body !== undefined && body !== null) {
+      requestHeaders['Content-Type'] = 'application/json';
+      requestBody = JSON.stringify(body);
+    }
+
+    const response = await fetch(buildRequestUrl(path), {
+      method,
+      headers: requestHeaders,
+      body: requestBody
+    });
+
+    const contentType = response.headers.get('content-type') || '';
+    const isJson = contentType.includes('application/json');
+    const payload = isJson ? await response.json() : null;
+
+    if (!response.ok) {
+      const message = payload?.error?.message || payload?.message || 'Request failed';
+      throw new Error(message);
+    }
+
+    return payload;
+  } catch (error) {
+    console.error('API request failed:', error);
+    throw error;
   }
-
-  const response = await fetch(buildRequestUrl(path), {
-    method,
-    headers: requestHeaders,
-    body: requestBody
-  });
-
-  const contentType = response.headers.get('content-type') || '';
-  const isJson = contentType.includes('application/json');
-  const payload = isJson ? await response.json() : null;
-
-  if (!response.ok) {
-    const message = payload?.error?.message || payload?.message || 'Request failed';
-    throw new Error(message);
-  }
-
-  return payload;
 }
 
 async function publicRequest(path, options) {
@@ -88,6 +93,15 @@ const api = {
     return response.url;
   },
   deleteVideo: (id) => authorizedRequest(`/api/videos/${id}`, { method: 'DELETE' }),
+
+  // Transcoding endpoints
+  startTranscoding: (id, resolution) => authorizedRequest(`/api/videos/${id}/transcode`, {
+    method: 'POST',
+    body: { resolution }
+  }),
+  getTranscodingStatus: (id) => authorizedRequest(`/api/videos/${id}/transcoding-status`),
+  getAvailableResolutions: () => authorizedRequest('/api/videos/transcoding/resolutions'),
+
   listUsers: () => authorizedRequest('/api/admin/users'),
   deleteUser: (username) => authorizedRequest(`/api/admin/users/${encodeURIComponent(username)}`, { method: 'DELETE' })
 };

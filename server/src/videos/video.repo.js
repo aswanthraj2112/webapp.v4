@@ -31,3 +31,8 @@ export async function deleteVideo(userId, videoId) {
   const repo = await loadRepo();
   return repo.deleteVideo(userId, videoId);
 }
+
+export async function updateVideoTranscoding(userId, videoId, transcodingData) {
+  const repo = await loadRepo();
+  return repo.updateVideoTranscoding(userId, videoId, transcodingData);
+}

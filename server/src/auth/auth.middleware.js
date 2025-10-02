@@ -68,6 +68,7 @@ const authMiddleware = async (req, res, next) => {
       raw: claims
     };
 
+    console.log(`🔐 AUTH: userId=${claims.sub}, username=${claims.username}`);
     return next();
   } catch (error) {
     return next(new AuthenticationError('Invalid or expired token'));

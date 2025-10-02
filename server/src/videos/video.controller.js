@@ -69,7 +69,13 @@ export const getVideoMetadata = async (req, res) => {
 };
 
 export const getVideoStream = async (req, res) => {
-  const variant = req.query.variant === 'transcoded' ? 'transcoded' : 'original';
+  const { variant = 'original' } = req.query;
+  const validVariants = ['original', 'transcoded', 'thumbnail'];
+
+  if (!validVariants.includes(variant)) {
+    return res.status(400).json({ error: `Invalid variant. Must be one of: ${validVariants.join(', ')}` });
+  }
+
   const url = await createStreamUrl({
     userId: req.user.sub,
     videoId: req.params.id,

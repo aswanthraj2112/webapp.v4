@@ -18,6 +18,7 @@ const attributeMap = {
   height: 'height',
   format: 'format',
   status: 'status',
+  transcodingProgress: 'transcodingProgress',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt'
 };
@@ -49,6 +50,7 @@ const toItem = (video) => {
     width: video.width ?? null,
     height: video.height ?? null,
     sizeBytes: video.sizeBytes ?? null,
+    transcodingProgress: video.transcodingProgress ?? null,
     createdAt: video.createdAt || now,
     updatedAt: video.updatedAt || now
   });
@@ -69,12 +71,13 @@ const fromItem = (item) => {
     height: item.height ?? null,
     sizeBytes: item.sizeBytes ?? null,
     status: item.status || 'uploaded',
+    transcodingProgress: item.transcodingProgress ?? null,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt
   };
 };
 
-export async function createVideo (video) {
+export async function createVideo(video) {
   const item = toItem(video);
   await ddb.send(new PutCommand({
     TableName: TABLE,
@@ -83,15 +86,16 @@ export async function createVideo (video) {
   return fromItem(item);
 }
 
-export async function getVideo (userId, videoId) {
+export async function getVideo(userId, videoId) {
   const { Item } = await ddb.send(new GetCommand({
     TableName: TABLE,
-    Key: { ownerId: String(userId), videoId }
+    Key: {
+      ownerId: String(userId),
+      videoId: String(videoId)
+    }
   }));
   return fromItem(Item);
-}
-
-export async function listVideos (userId, page = 1, limit = 10) {
+} export async function listVideos(userId, page = 1, limit = 10) {
   const { Items = [] } = await ddb.send(new QueryCommand({
     TableName: TABLE,
     KeyConditionExpression: 'ownerId = :o',
@@ -110,7 +114,7 @@ export async function listVideos (userId, page = 1, limit = 10) {
   return { total, items };
 }
 
-export async function updateVideo (userId, videoId, updates) {
+export async function updateVideo(userId, videoId, updates) {
   const updateEntries = Object.entries(updates || {});
   if (updateEntries.length === 0) {
     return getVideo(userId, videoId);
@@ -133,7 +137,7 @@ export async function updateVideo (userId, videoId, updates) {
 
   const { Attributes } = await ddb.send(new UpdateCommand({
     TableName: TABLE,
-    Key: { ownerId: String(userId), videoId },
+    Key: { ownerId: String(userId), videoId: String(videoId) },
     UpdateExpression: `SET ${setExprs.join(', ')}`,
     ExpressionAttributeNames: exprNames,
     ExpressionAttributeValues: cleanUndefined(exprValues),
@@ -143,9 +147,16 @@ export async function updateVideo (userId, videoId, updates) {
   return fromItem(Attributes);
 }
 
-export async function deleteVideo (userId, videoId) {
+export async function deleteVideo(userId, videoId) {
   await ddb.send(new DeleteCommand({
     TableName: TABLE,
-    Key: { ownerId: String(userId), videoId }
+    Key: { ownerId: String(userId), videoId: String(videoId) }
   }));
+}
+
+export async function updateVideoTranscoding(userId, videoId, transcodingData) {
+  return updateVideo(userId, videoId, {
+    ...transcodingData,
+    updatedAt: new Date().toISOString()
+  });
 }

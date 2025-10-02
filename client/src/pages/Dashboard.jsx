@@ -29,6 +29,7 @@ function Dashboard({ user, notify }) {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState(null);
+  const [transcodingVideos, setTranscodingVideos] = useState(new Set());
 
   const loadVideos = async (nextPage = page) => {
     setLoading(true);
@@ -47,6 +48,57 @@ function Dashboard({ user, notify }) {
     loadVideos(page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
+
+  // Polling for transcoding videos
+  useEffect(() => {
+    if (transcodingVideos.size === 0) return;
+
+    const interval = setInterval(async () => {
+      const updatedVideos = [...videos];
+      let hasChanges = false;
+
+      for (const videoId of transcodingVideos) {
+        try {
+          const status = await api.getTranscodingStatus(videoId);
+          const videoIndex = updatedVideos.findIndex(v => v.id === videoId);
+
+          if (videoIndex !== -1) {
+            updatedVideos[videoIndex] = {
+              ...updatedVideos[videoIndex],
+              status: status.status,
+              transcodingProgress: status.transcodingProgress,
+              transcodedFilename: status.hasTranscodedVersion ? 'transcoded' : null,
+              thumbPath: status.hasThumbnail ? 'thumb' : null
+            };
+            hasChanges = true;
+
+            // Remove from transcoding set if completed
+            if (status.status !== 'transcoding') {
+              setTranscodingVideos(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(videoId);
+                return newSet;
+              });
+
+              if (status.status === 'transcoded') {
+                notify(`Video transcoding completed!`, 'success');
+              } else if (status.status === 'failed') {
+                notify(`Video transcoding failed`, 'error');
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Failed to get transcoding status:', error);
+        }
+      }
+
+      if (hasChanges) {
+        setVideos(updatedVideos);
+      }
+    }, 3000); // Poll every 3 seconds
+
+    return () => clearInterval(interval);
+  }, [transcodingVideos, videos, notify]);
 
   const handleUpload = async (file) => {
     setUploading(true);
@@ -79,10 +131,10 @@ function Dashboard({ user, notify }) {
     }
   };
 
-  const handleSelect = async (video) => {
+  const handleSelect = async (video, variant = 'original') => {
     try {
-      const streamUrl = await api.getStreamUrl(video.id);
-      setSelectedVideo({ ...video, streamUrl });
+      const streamUrl = await api.getStreamUrl(video.id, { variant });
+      setSelectedVideo({ ...video, streamUrl, variant });
     } catch (error) {
       notify(error.message || 'Unable to generate stream URL', 'error');
     }
@@ -94,6 +146,27 @@ function Dashboard({ user, notify }) {
       window.open(url, '_blank');
     } catch (error) {
       notify(error.message || 'Unable to download video', 'error');
+    }
+  };
+
+  const handleTranscode = async (video, resolution) => {
+    try {
+      await api.startTranscoding(video.id, resolution);
+      notify(`Transcoding to ${resolution} started for ${video.originalName}`, 'success');
+
+      // Add to transcoding videos set for polling
+      setTranscodingVideos(prev => new Set([...prev, video.id]));
+
+      // Update video status immediately in the UI
+      setVideos(prevVideos =>
+        prevVideos.map(v =>
+          v.id === video.id
+            ? { ...v, status: 'transcoding', transcodingProgress: 0 }
+            : v
+        )
+      );
+    } catch (error) {
+      notify(error.message || 'Failed to start transcoding', 'error');
     }
   };
 
@@ -130,6 +203,7 @@ function Dashboard({ user, notify }) {
         onSelect={handleSelect}
         onDownload={handleDownload}
         onDelete={handleDelete}
+        onTranscode={handleTranscode}
       />
       {selectedVideo && (
         <VideoPlayer video={selectedVideo} onClose={() => setSelectedVideo(null)} />

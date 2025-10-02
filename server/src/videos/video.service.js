@@ -95,7 +95,9 @@ export async function fetchVideosForUser({ userId, page, limit }) {
 }
 
 export async function fetchVideoMetadata({ userId, videoId }) {
+  console.log(`🔍 fetchVideoMetadata: userId=${userId}, videoId=${videoId}`);
   const video = await repoGetVideo(String(userId), videoId);
+  console.log(`🔍 fetchVideoMetadata result:`, video ? 'found' : 'NOT FOUND');
   if (!video) {
     throw new NotFoundError('Video not found');
   }
@@ -104,7 +106,22 @@ export async function fetchVideoMetadata({ userId, videoId }) {
 
 export async function createStreamUrl({ userId, videoId, variant, download }) {
   const video = await fetchVideoMetadata({ userId, videoId });
-  const key = variant === 'transcoded' ? video.transcodedFilename : video.storedFilename;
+
+  let key;
+  if (variant === 'transcoded') {
+    key = video.transcodedFilename;
+    if (!key) {
+      throw new NotFoundError('Transcoded video not available. Please transcode the video first.');
+    }
+  } else if (variant === 'thumbnail') {
+    key = video.thumbPath;
+    if (!key) {
+      throw new NotFoundError('Thumbnail not available');
+    }
+  } else {
+    key = video.storedFilename;
+  }
+
   if (!key) {
     throw new NotFoundError('Video file not available');
   }
