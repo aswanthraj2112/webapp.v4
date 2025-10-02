@@ -29,9 +29,69 @@ function buildRequestUrl(path = '') {
   return `${API_BASE_URL}${sanitizedPath}`;
 }
 
+// Safe wrapper around fetchAuthSession that handles MFA edge cases
+const safeFetchAuthSession = async () => {
+  try {
+    const session = await fetchAuthSession({ forceRefresh: false });
+    return session;
+  } catch (error) {
+    console.warn('fetchAuthSession failed:', error.message);
+
+    // Check for specific error patterns that indicate auth challenges
+    const errorMessage = error.message || '';
+    const isAuthChallenge = errorMessage.includes('challenge') ||
+      errorMessage.includes('MFA') ||
+      errorMessage.includes('authentication challenge') ||
+      errorMessage.includes('NotAuthorizedException') ||
+      errorMessage.includes('UserNotConfirmedException') ||
+      errorMessage.includes('PasswordResetRequiredException') ||
+      errorMessage.includes('No valid session available');
+
+    if (isAuthChallenge) {
+      console.debug('Auth challenge detected in API, not retrying fetchAuthSession');
+      throw new Error('Session unavailable during authentication challenge');
+    }
+
+    // For other errors, try once with force refresh
+    try {
+      console.debug('Retrying fetchAuthSession with force refresh');
+      const session = await fetchAuthSession({ forceRefresh: true });
+      return session;
+    } catch (secondError) {
+      console.error('Both fetchAuthSession attempts failed:', secondError);
+      throw secondError;
+    }
+  }
+};
+
 async function getAccessToken() {
-  const session = await fetchAuthSession();
-  return session.tokens.accessToken.toString();
+  try {
+    const session = await safeFetchAuthSession();
+
+    console.debug('API token request:', {
+      session: session ? 'exists' : 'null',
+      tokens: session.tokens ? 'exists' : 'null',
+      hasAccessToken: !!(session.tokens && session.tokens.accessToken),
+      hasIdToken: !!(session.tokens && session.tokens.idToken),
+      isSignedIn: session.credentials ? true : false
+    });
+
+    // Check if session and tokens are available
+    if (!session || !session.tokens || !session.tokens.accessToken) {
+      throw new Error('Access token not available - authentication may be incomplete');
+    }
+
+    return session.tokens.accessToken.toString();
+  } catch (error) {
+    // Only log actual errors, not authentication challenges
+    if (!error.message.includes('authentication challenge') &&
+      !error.message.includes('Session unavailable during authentication challenge')) {
+      console.error('Error getting access token:', error);
+    } else {
+      console.debug('Access token unavailable due to authentication challenge:', error.message);
+    }
+    throw error;
+  }
 }
 
 async function authorizedRequest(path, { method = 'GET', body, headers = {} } = {}) {
@@ -65,6 +125,9 @@ async function authorizedRequest(path, { method = 'GET', body, headers = {} } = 
     return payload;
   } catch (error) {
     console.error('API request failed:', error);
+    if (error.message.includes('authentication may be incomplete')) {
+      throw new Error('Please complete the authentication process');
+    }
     throw error;
   }
 }

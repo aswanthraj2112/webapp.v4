@@ -5,7 +5,7 @@ services:
     ports: [ "8080:8080" ]
     environment:
       - AWS_REGION=ap-southeast-2
-      - CLIENT_ORIGINS=http://localhost:3000,https://n11817143-videoapp.cab432.com,http://n11817143-videoapp.cab432.com,http://n11817143-videoapp.cab432.com:3000
+      - CLIENT_ORIGINS=http://localhost:3000,https://n11817143-videoapp.cab432.com,http://n11817143-videoapp.cab432.com:3000
       - COGNITO_USER_POOL_ID=ap-southeast-2_CdVnmKfrW
       - DOMAIN_NAME=n11817143-videoapp.cab432.com
       - PARAMETER_PREFIX=/n11817143/app/

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { signIn, signUp, confirmSignUp, resendSignUpCode, confirmSignIn } from 'aws-amplify/auth';
+import { signIn, signUp, confirmSignUp, resendSignUpCode, confirmSignIn, setUpTOTP, verifyTOTPSetup } from 'aws-amplify/auth';
 
+// MFA-enabled login component - Updated October 2025
 function Login({ onAuthenticated, notify }) {
   const [mode, setMode] = useState('signIn');
   const [form, setForm] = useState({ username: '', password: '', email: '', code: '', newPassword: '' });
@@ -8,6 +9,8 @@ function Login({ onAuthenticated, notify }) {
   const [challengeUser, setChallengeUser] = useState(null);
   const [challengeType, setChallengeType] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [totpSetupUrl, setTotpSetupUrl] = useState(null);
+  const [totpSetupDetails, setTotpSetupDetails] = useState(null);
 
   const handleChange = (event) => {
     setForm((previous) => ({ ...previous, [event.target.name]: event.target.value }));
@@ -17,6 +20,8 @@ function Login({ onAuthenticated, notify }) {
     setForm({ username: '', password: '', email: '', code: '', newPassword: '' });
     setChallengeUser(null);
     setChallengeType(null);
+    setTotpSetupUrl(null);
+    setTotpSetupDetails(null);
   };
 
   const handleSignIn = async (event) => {
@@ -43,7 +48,7 @@ function Login({ onAuthenticated, notify }) {
             break;
           case 'MFA_SETUP':
             setChallengeType('setupMfa');
-            notify('Please set up MFA using the Cognito hosted UI.', 'warning');
+            notify('MFA setup required. Follow the instructions to configure your authenticator app.', 'info');
             break;
           default:
             notify(`Unsupported challenge: ${user.challengeName}`, 'error');
@@ -153,6 +158,68 @@ function Login({ onAuthenticated, notify }) {
     }
   };
 
+  const handleSetupTotp = async () => {
+    if (!challengeUser) return;
+    setSubmitting(true);
+    try {
+      // The challengeUser from MFA_SETUP contains the session needed for setup
+      // setUpTOTP should work with the challenge session context
+      const totpSetupDetails = await setUpTOTP();
+
+      // Generate the TOTP URI manually since we're in a challenge context
+      const secretCode = totpSetupDetails.sharedSecret;
+      const appName = 'VideoApp';
+      const username = challengeUser.username || form.username;
+      const issuer = encodeURIComponent(appName);
+      const accountName = encodeURIComponent(`${issuer}:${username}`);
+      const setupUri = `otpauth://totp/${accountName}?secret=${secretCode}&issuer=${issuer}`;
+
+      setTotpSetupDetails({ secretCode, setupDetails: totpSetupDetails });
+      setTotpSetupUrl(setupUri);
+      notify('Scan the QR code with your authenticator app, then enter the verification code.', 'info');
+    } catch (error) {
+      console.error('TOTP setup error:', error);
+      notify(error.message || 'Unable to set up TOTP. Please try again.', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleConfirmTotpSetup = async (event) => {
+    event.preventDefault();
+    if (!form.code || !totpSetupDetails) {
+      notify('Enter the verification code from your authenticator app', 'error');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      // Complete the TOTP setup verification
+      await verifyTOTPSetup({ code: form.code.trim() });
+
+      // After verification, continue with the auth challenge
+      // Try to complete the sign-in process
+      await confirmSignIn({ challengeResponse: 'SOFTWARE_TOKEN_MFA' });
+
+      // If successful, authentication should be complete
+      resetForm();
+      await onAuthenticated();
+    } catch (error) {
+      console.error('TOTP verification error:', error);
+      if (error.message.includes('Invalid code') || error.message.includes('Code mismatch')) {
+        notify('Invalid verification code. Please check your authenticator app and try again.', 'error');
+      } else if (error.message.includes('setup') && error.message.includes('complete')) {
+        // Setup completed but need to sign in again
+        notify('MFA setup complete! Please sign in again with your authenticator app.', 'success');
+        setMode('signIn');
+        resetForm();
+      } else {
+        notify(error.message || 'Verification failed. Please try again.', 'error');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (mode === 'confirm') {
     return (
       <div className="auth-card">
@@ -244,26 +311,103 @@ function Login({ onAuthenticated, notify }) {
   if (challengeType === 'setupMfa') {
     return (
       <div className="auth-card">
-        <h2>Multi-factor setup required</h2>
-        <p>
-          Your account requires MFA configuration. Please complete the setup in the AWS Cognito hosted UI or
-          contact the administrator for assistance.
-        </p>
-        <button
-          type="button"
-          className="btn"
-          onClick={() => {
-            setMode('signIn');
-            resetForm();
-          }}
-        >
-          Back to sign in
-        </button>
+        <h2>Multi-factor authentication setup</h2>
+        {!totpSetupUrl ? (
+          <div>
+            <p>
+              Your account requires MFA setup. We'll configure TOTP (Time-based One-Time Password)
+              using an authenticator app like Google Authenticator, Authy, Microsoft Authenticator, or similar.
+            </p>
+            <div style={{ margin: '20px 0', padding: '15px', backgroundColor: '#f0f8ff', borderRadius: '4px', border: '1px solid #d1ecf1' }}>
+              <h4>Instructions:</h4>
+              <ol>
+                <li>Install an authenticator app on your phone if you don't have one</li>
+                <li>Click "Set up authenticator app" below</li>
+                <li>Scan the QR code or enter the setup key manually</li>
+                <li>Enter the 6-digit code from your app to complete setup</li>
+              </ol>
+            </div>
+            <button
+              type="button"
+              className="btn"
+              onClick={handleSetupTotp}
+              disabled={submitting}
+            >
+              {submitting ? 'Setting up...' : 'Set up authenticator app'}
+            </button>
+            <button
+              type="button"
+              className="btn-link"
+              onClick={() => {
+                setMode('signIn');
+                resetForm();
+              }}
+              disabled={submitting}
+            >
+              Cancel and go back
+            </button>
+          </div>
+        ) : (
+          <div>
+            <p><strong>Step 1:</strong> Scan this QR code with your authenticator app</p>
+            <div style={{ margin: '20px 0', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '4px', textAlign: 'center' }}>
+              <div style={{ marginBottom: '15px' }}>
+                <img
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(totpSetupUrl)}`}
+                  alt="QR Code for TOTP Setup"
+                  style={{ border: '1px solid #ddd', borderRadius: '4px' }}
+                />
+              </div>
+              <details>
+                <summary style={{ cursor: 'pointer', marginBottom: '10px' }}>
+                  Can't scan? Click to show manual setup key
+                </summary>
+                <div style={{ padding: '10px', backgroundColor: '#fff', borderRadius: '4px', fontSize: '12px' }}>
+                  <p><strong>Secret Key:</strong></p>
+                  <div style={{ fontFamily: 'monospace', fontSize: '14px', padding: '5px', backgroundColor: '#f8f9fa', border: '1px solid #ddd', borderRadius: '3px', wordBreak: 'break-all' }}>
+                    {totpSetupDetails.secretCode}
+                  </div>
+                  <p style={{ marginTop: '10px' }}><strong>Account Name:</strong> VideoApp:{challengeUser?.username || form.username}</p>
+                  <p><strong>Issuer:</strong> VideoApp</p>
+                </div>
+              </details>
+            </div>
+
+            <p><strong>Step 2:</strong> Enter the 6-digit code from your authenticator app</p>
+            <form onSubmit={handleConfirmTotpSetup}>
+              <label htmlFor="code">Verification code</label>
+              <input
+                id="code"
+                name="code"
+                type="text"
+                value={form.code}
+                onChange={handleChange}
+                placeholder="123456"
+                maxLength={6}
+                disabled={submitting}
+                style={{ textAlign: 'center', fontSize: '18px', letterSpacing: '2px' }}
+              />
+              <button type="submit" className="btn" disabled={submitting || !form.code || form.code.length !== 6}>
+                {submitting ? 'Verifying...' : 'Complete MFA setup'}
+              </button>
+            </form>
+            <button
+              type="button"
+              className="btn-link"
+              onClick={() => {
+                setTotpSetupUrl(null);
+                setTotpSetupDetails(null);
+                setForm({ ...form, code: '' });
+              }}
+              disabled={submitting}
+            >
+              Back to setup instructions
+            </button>
+          </div>
+        )}
       </div>
     );
-  }
-
-  return (
+  } return (
     <div className="auth-card">
       <h2>{mode === 'signIn' ? 'Sign in' : 'Create an account'}</h2>
       <form onSubmit={mode === 'signIn' ? handleSignIn : handleSignUp}>
