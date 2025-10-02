@@ -6,11 +6,11 @@ This repository contains a stateless, cloud-native video transcoder application 
 - **Cognito User Pool:** `n11817143-a2` (`ap-southeast-2_CdVnmKfrW`)
 - **S3 Bucket:** `n11817143-a2`
 - **DynamoDB Table:** `n11817143-VideoApp`
-- **ElastiCache Cluster:** `n11817143-a2-cache`
+- **ElastiCache Cluster:** `n11817143-a2-cache` (`n11817143-a2-cache.km2jzi.cfg.apse2.cache.amazonaws.com`)
 - **Parameter Store Prefix:** `/n11817143/app/`
 - **Secrets Manager Secret:** `n11817143-a2-secret`
 - **Domain Name:** `n11817143-videoapp.cab432.com`
-- **EC2 CNAME Target:** `ec2-3-107-100-58.ap-southeast-2.compute.amazonaws.com`
+- **EC2 CNAME Target:** `ec2-3-27-210-9.ap-southeast-2.compute.amazonaws.com`
 
 ## Repository Layout
 
@@ -56,54 +56,101 @@ Key behaviour:
 
 > **Optional inputs:** Provide `cache_subnet_ids` and `cache_security_group_ids` if the default VPC does not meet assignment requirements. All variables have defaults that match the assignment specification, but they can be overridden via `terraform.tfvars` or `-var` flags.
 
-After `terraform apply` completes, retrieve runtime secrets for the backend:
+After `terraform apply` completes, the application will automatically load configuration from Parameter Store and Secrets Manager. You can verify the configuration is accessible:
 
 ```bash
+# Verify Parameter Store configuration
+npm --prefix server run params:status
+
+# Optional: View all parameters (for troubleshooting)
 aws ssm get-parameters-by-path \
   --path /n11817143/app/ \
   --with-decryption \
   --profile cab432
 
+# Optional: View JWT secret (for troubleshooting)
 aws secretsmanager get-secret-value \
   --secret-id n11817143-a2-secret \
   --profile cab432
 ```
 
-These commands will return the Cognito client ID and secret needed to configure the API service.
+No manual configuration is required - the application loads all settings dynamically.
 
 ## Local Development
 
-1. Install dependencies (optional when using Docker):
+The application uses **AWS Parameter Store** and **Secrets Manager** for configuration, eliminating the need for manual .env file management. All configuration is loaded dynamically at runtime.
+
+### Quick Start
+
+1. **Ensure AWS credentials are configured** for your environment:
+   ```bash
+   aws configure --profile cab432
+   export AWS_PROFILE=cab432
+   ```
+
+2. **Start both services via Docker** (recommended):
+   ```bash
+   docker compose up --build
+   ```
+   - Backend available at `http://n11817143-videoapp.cab432.com:8080/api`
+   - Frontend served at `http://n11817143-videoapp.cab432.com:3000`
+
+### Configuration Details
+
+The application automatically loads configuration from:
+- **Parameter Store**: `/n11817143/app/*` parameters
+- **Secrets Manager**: `n11817143-a2-secret` for JWT secret
+- **Environment Variables**: For local overrides (optional)
+
+Current configuration defaults (can be overridden via environment variables):
+- **AWS Region**: `ap-southeast-2`
+- **Cognito User Pool**: `ap-southeast-2_CdVnmKfrW`
+- **S3 Bucket**: `n11817143-a2` 
+- **DynamoDB Table**: `n11817143-VideoApp`
+- **ElastiCache Endpoint**: `n11817143-a2-cache.km2jzi.cfg.apse2.cache.amazonaws.com:11211`
+- **Domain**: `n11817143-videoapp.cab432.com`
+
+### Alternative Development Options
+
+1. **Install dependencies** (optional when using Docker):
    ```bash
    npm --prefix server install
    npm --prefix client install
    ```
-2. Create a `server/.env` file or export shell variables with the following minimum configuration (values shown are the defaults emitted by Terraform):
-   ```ini
-   AWS_REGION=ap-southeast-2
-   CLIENT_ORIGINS=http://localhost:3000,https://n11817143-videoapp.cab432.com
-   COGNITO_USER_POOL_ID=ap-southeast-2_CdVnmKfrW
-   COGNITO_CLIENT_ID=<value from Parameter Store>
-   ELASTICACHE_ENDPOINT=n11817143-a2-cache.cfg.apse2.cache.amazonaws.com:11211
-   S3_BUCKET=n11817143-a2
-   DYNAMO_TABLE=n11817143-VideoApp
-   PARAMETER_PREFIX=/n11817143/app/
-   DOMAIN_NAME=n11817143-videoapp.cab432.com
-   EC2_CNAME_TARGET=ec2-3-107-100-58.ap-southeast-2.compute.amazonaws.com
-   ```
-3. Start both services via Docker:
-   ```bash
-   docker compose up --build
-   ```
-   - Backend available at `http://localhost:8080/api`
-   - Frontend served at `http://localhost:3000`
 
-4. For iterative frontend work without containers, run Vite directly:
+2. **For local .env override** (optional), create `server/.env` with minimal config:
+   ```ini
+   PORT=8080
+   CLIENT_ORIGINS=http://localhost:3000,http://n11817143-videoapp.cab432.com:3000
+   AWS_REGION=ap-southeast-2
+   ```
+
+3. **For iterative frontend development** without containers:
    ```bash
+   # Start backend via Docker (recommended)
+   docker compose up backend -d
+   
+   # Or start backend directly (requires AWS credentials)
+   npm --prefix server run dev
+   
+   # Start frontend development server  
    npm --prefix client run dev
    ```
 
-    Ensure the backend is running (either via Docker or `npm --prefix server run dev`).
+### Troubleshooting Configuration
+
+If you encounter configuration issues:
+
+```bash
+# Check Parameter Store connectivity
+npm --prefix server run params:status
+
+# View Docker logs for configuration loading
+docker compose logs backend | grep -E "(Configuration|Parameter|Secret)"
+
+# Test AWS credentials
+aws sts get-caller-identity --profile cab432
+```
 
 ## Deploying to EC2
 
@@ -114,22 +161,35 @@ These commands will return the Cognito client ID and secret needed to configure 
    Tag and push the images to your registry of choice (e.g., Amazon ECR).
 
 2. **Provision the host** using Terraform outputs:
-   - Ensure the EC2 instance referenced by the Route 53 record (`ec2-3-107-100-58.ap-southeast-2.compute.amazonaws.com`) has Docker and Docker Compose installed.
-   - Copy the `docker-compose.yml`, the `client/` and `server/` directories (or pre-built images), and your `.env` files to the instance.
+   - Ensure the EC2 instance has Docker and Docker Compose installed
+   - Configure AWS credentials on the instance (IAM role or AWS CLI)
+   - Copy the `docker-compose.yml` and source directories to the instance
 
-3. **Configure runtime secrets** on the EC2 instance by exporting the same environment variables documented above. The recommended approach is to create a `.env` file alongside the compose file and reference it with the `env_file` directive.
-
-4. **Launch the stack** on the instance:
+3. **Deploy the application**:
    ```bash
-   docker compose pull   # when using images pushed to a registry
-   docker compose up -d
+   # Clone or copy the application
+   git clone <repository-url>
+   cd webapp.v1
+   
+   # Launch the stack (no manual .env needed)
+   docker compose up --build -d
    ```
 
-5. Confirm health:
+4. **Verify deployment**:
    ```bash
+   # Check application health
    curl -I http://localhost:8080/api/health
    curl -I http://localhost:3000
+   
+   # Verify configuration loading
+   docker compose logs backend | grep "Configuration loaded"
    ```
+
+5. **Domain access**:
+   - Frontend: `http://n11817143-videoapp.cab432.com:3000`
+   - Backend API: `http://n11817143-videoapp.cab432.com:8080/api`
+
+The application automatically loads all configuration from AWS services - no manual environment setup required.
 
 ## Operations & Maintenance
 
