@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import { loadAppConfig } from './utils/parameterStore.js';
+import { getJWTSecret } from './utils/secrets.js';
 
 dotenv.config();
 
@@ -52,6 +53,7 @@ const config = {
 
 config.initialize = async function () {
   try {
+    // Load configuration from Parameter Store
     const paramConfig = await loadAppConfig();
 
     this.COGNITO_CLIENT_ID = paramConfig.COGNITO_CLIENT_ID || this.COGNITO_CLIENT_ID;
@@ -64,6 +66,20 @@ config.initialize = async function () {
     this.PRESIGNED_URL_TTL = paramConfig.PRESIGNED_URL_TTL || this.PRESIGNED_URL_TTL;
     this.MAX_UPLOAD_SIZE_MB = paramConfig.MAX_UPLOAD_SIZE_MB || this.MAX_UPLOAD_SIZE_MB;
     this.DOMAIN_NAME = paramConfig.DOMAIN_NAME || this.DOMAIN_NAME;
+
+    // Load JWT secret from Secrets Manager
+    try {
+      const jwtSecret = await getJWTSecret();
+      if (jwtSecret && jwtSecret !== process.env.JWT_SECRET) {
+        this.JWT_SECRET = jwtSecret;
+        this.JWT_SECRET_SOURCE = 'Secrets Manager';
+      } else {
+        this.JWT_SECRET_SOURCE = 'Environment Variable';
+      }
+    } catch (error) {
+      console.warn('⚠️  Failed to load JWT secret from Secrets Manager. Using environment variable.', error.message);
+      this.JWT_SECRET_SOURCE = 'Environment Variable';
+    }
 
     console.log('✅ Configuration loaded');
     console.log(`   Cognito User Pool: ${this.COGNITO_USER_POOL_ID}`);

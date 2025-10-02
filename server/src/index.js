@@ -76,7 +76,7 @@ const start = async () => {
   app.listen(config.PORT, '0.0.0.0', () => {
     console.log(`Server listening on port ${config.PORT}`);
     console.log(`Available at: ${config.DOMAIN_NAME || 'http://n11817143-videoapp.cab432.com'}:${config.PORT}`);
-    console.log(`JWT Secret loaded: ${config.JWT_SECRET ? '✅ From Secrets Manager' : '⚠️  Fallback'}`);
+    console.log(`JWT Secret loaded: ${config.JWT_SECRET_SOURCE === 'Secrets Manager' ? '✅ From Secrets Manager' : '⚠️  Fallback'}`);
     console.log(`Configuration loaded: ${config.S3_BUCKET ? '✅ From Parameter Store' : '⚠️  Fallback'}`);
   });
 };

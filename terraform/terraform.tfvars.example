@@ -1,0 +1,11 @@
+# ElastiCache configuration
+# Replace with actual subnet IDs from your VPC
+cache_subnet_ids = [
+  "subnet-xxxxxxxxx", 
+  "subnet-yyyyyyyyy"
+]
+
+# Replace with actual security group ID
+cache_security_group_ids = [
+  "sg-xxxxxxxxx"
+]

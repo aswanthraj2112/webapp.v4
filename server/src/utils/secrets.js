@@ -65,4 +65,23 @@ export async function getCognitoClientSecret() {
     }
 }
 
-export default { getSecret, getCognitoClientSecret };
+/**
+ * Retrieves the JWT secret from AWS Secrets Manager
+ * @returns {Promise<string|null>} The JWT secret or null if unavailable
+ */
+export async function getJWTSecret() {
+    try {
+        const secret = await getSecret(SECRET_NAME);
+
+        if (typeof secret === 'object' && secret) {
+            return secret.JWT_SECRET || null;
+        }
+
+        return null;
+    } catch (error) {
+        console.error('Failed to retrieve JWT secret:', error.message);
+        return process.env.JWT_SECRET || null;
+    }
+}
+
+export default { getSecret, getCognitoClientSecret, getJWTSecret };

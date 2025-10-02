@@ -18,9 +18,8 @@ provider "aws" {
 
 data "aws_caller_identity" "current" {}
 
-data "aws_cognito_user_pool" "existing" {
-  user_pool_id = var.cognito_user_pool_id
-}
+# Note: Removed data source due to IAM permission constraints
+# Using the user pool ID directly from variables
 
 resource "aws_s3_bucket" "video" {
   bucket        = var.s3_bucket_name
@@ -78,46 +77,48 @@ resource "aws_dynamodb_table" "videos" {
   })
 }
 
-resource "aws_cognito_user_pool_client" "app" {
-  name         = "${var.project_prefix}-web-client"
-  user_pool_id = data.aws_cognito_user_pool.existing.id
+# Commented out due to IAM permission constraints
+# resource "aws_cognito_user_pool_client" "app" {
+#   name         = "${var.project_prefix}-web-client"
+#   user_pool_id = var.cognito_user_pool_id
+#
+#   generate_secret = true
+#   explicit_auth_flows = [
+#     "ALLOW_REFRESH_TOKEN_AUTH",
+#     "ALLOW_USER_PASSWORD_AUTH",
+#     "ALLOW_USER_SRP_AUTH"
+#   ]
+#   supported_identity_providers = ["COGNITO"]
+#   prevent_user_existence_errors = "ENABLED"
+#   access_token_validity         = var.access_token_validity_minutes
+#   id_token_validity             = var.id_token_validity_minutes
+#   refresh_token_validity        = var.refresh_token_validity_days
+#   token_validity_units {
+#     access_token  = "minutes"
+#     id_token      = "minutes"
+#     refresh_token = "days"
+#   }
+# }
 
-  generate_secret = true
-  explicit_auth_flows = [
-    "ALLOW_REFRESH_TOKEN_AUTH",
-    "ALLOW_USER_PASSWORD_AUTH",
-    "ALLOW_USER_SRP_AUTH"
-  ]
-  supported_identity_providers = ["COGNITO"]
-  prevent_user_existence_errors = "ENABLED"
-  access_token_validity         = var.access_token_validity_minutes
-  id_token_validity             = var.id_token_validity_minutes
-  refresh_token_validity        = var.refresh_token_validity_days
-  token_validity_units {
-    access_token  = "minutes"
-    id_token      = "minutes"
-    refresh_token = "days"
-  }
-}
-
-resource "aws_secretsmanager_secret" "app" {
-  name        = var.secrets_manager_name
-  description = "Cognito client secret for ${var.project_prefix}"
-
-  tags = var.default_tags
-}
-
-resource "aws_secretsmanager_secret_version" "app" {
-  secret_id     = aws_secretsmanager_secret.app.id
-  secret_string = jsonencode({ cognitoClientSecret = aws_cognito_user_pool_client.app.client_secret })
-}
+# Commented out due to IAM permission constraints
+# resource "aws_secretsmanager_secret" "app" {
+#   name        = var.secrets_manager_name
+#   description = "Cognito client secret for ${var.project_prefix}"
+#
+#   tags = var.default_tags
+# }
+#
+# resource "aws_secretsmanager_secret_version" "app" {
+#   secret_id     = aws_secretsmanager_secret.app.id
+#   secret_string = jsonencode({ cognitoClientSecret = aws_cognito_user_pool_client.app.client_secret })
+# }
 
 locals {
   parameter_prefix = trim(var.parameter_store_prefix, "/")
   cache_enabled    = length(var.cache_subnet_ids) > 0
   parameters = {
-    cognitoClientId       = aws_cognito_user_pool_client.app.id
-    cognitoUserPoolId     = data.aws_cognito_user_pool.existing.id
+    # cognitoClientId       = aws_cognito_user_pool_client.app.id  # Commented due to IAM constraints
+    cognitoUserPoolId     = var.cognito_user_pool_id
     domainName            = var.domain_name
     dynamoTable           = aws_dynamodb_table.videos.name
     maxUploadSizeMb       = var.max_upload_size_mb
@@ -129,22 +130,30 @@ locals {
   }
 }
 
-resource "aws_ssm_parameter" "app" {
-  for_each = local.parameters
+# Commented out due to IAM permission constraints
+# resource "aws_ssm_parameter" "app" {
+#   for_each = local.parameters
+#
+#   name  = "/${local.parameter_prefix}/${each.key}"
+#   type  = "String"
+#   value = tostring(each.value)
+#   tags  = var.default_tags
+# }
 
-  name  = "/${local.parameter_prefix}/${each.key}"
-  type  = "String"
-  value = tostring(each.value)
-  tags  = var.default_tags
+# Use existing subnet group instead of managing it
+data "aws_elasticache_subnet_group" "existing" {
+  count = local.cache_enabled ? 1 : 0
+  name  = "cab432-subnets"
 }
 
-resource "aws_elasticache_subnet_group" "cache" {
-  count      = local.cache_enabled ? 1 : 0
-  name       = "${var.project_prefix}-cache-subnet"
-  subnet_ids = var.cache_subnet_ids
-
-  tags = var.default_tags
-}
+# Commented out to avoid conflicts with existing subnet group
+# resource "aws_elasticache_subnet_group" "cache" {
+#   count      = local.cache_enabled ? 1 : 0
+#   name       = "cab432-subnets"  # Use existing subnet group name
+#   subnet_ids = var.cache_subnet_ids
+#
+#   tags = var.default_tags
+# }
 
 resource "aws_elasticache_cluster" "cache" {
   count                = local.cache_enabled ? 1 : 0
@@ -153,7 +162,7 @@ resource "aws_elasticache_cluster" "cache" {
   node_type            = var.elasticache_node_type
   num_cache_nodes      = var.elasticache_node_count
   port                 = 11211
-  subnet_group_name    = local.cache_enabled ? aws_elasticache_subnet_group.cache[0].name : null
+  subnet_group_name    = local.cache_enabled ? data.aws_elasticache_subnet_group.existing[0].name : null
   security_group_ids   = var.cache_security_group_ids
   az_mode              = "single-az"
 
@@ -168,17 +177,23 @@ resource "aws_elasticache_cluster" "cache" {
 #   private_zone = false
 # }
 
-resource "aws_route53_record" "app" {
-  zone_id = "Z02680423BHWEVRU2JZDQ"  # cab432.com hosted zone ID
-  name    = var.domain_name
-  type    = "CNAME"
-  ttl     = 300
-  records = [var.ec2_public_dns]
+# Commented out due to IAM permission constraints
+# resource "aws_route53_record" "app" {
+#   zone_id = "Z02680423BHWEVRU2JZDQ"  # cab432.com hosted zone ID
+#   name    = var.domain_name
+#   type    = "CNAME"
+#   ttl     = 300
+#   records = [var.ec2_public_dns]
+# }
+
+output "cognito_user_pool_id" {
+  value = var.cognito_user_pool_id
 }
 
-output "cognito_client_id" {
-  value = aws_cognito_user_pool_client.app.id
-}
+# Commented out due to IAM constraints
+# output "cognito_client_id" {
+#   value = aws_cognito_user_pool_client.app.id
+# }
 
 output "parameter_store_prefix" {
   value = "/${local.parameter_prefix}"
@@ -196,3 +211,9 @@ output "elasticache_endpoint" {
   value       = local.cache_enabled ? aws_elasticache_cluster.cache[0].configuration_endpoint : ""
   description = "Configuration endpoint for the Memcached cluster. Empty when cache_subnet_ids is not provided."
 }
+
+# Note: Due to IAM permission constraints, the following resources need to be managed manually:
+# - Cognito User Pool Client (requires cognito-idp:CreateUserPoolClient permission)
+# - Secrets Manager Secret (requires secretsmanager:CreateSecret permission)  
+# - SSM Parameters (requires ssm:PutParameter permission)
+# - Route53 Record (requires route53:ChangeResourceRecordSets permission)

@@ -9,11 +9,12 @@ import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import AdminPage from './pages/Admin.jsx';
 
-export const ToastContext = createContext(() => {});
+export const ToastContext = createContext(() => { });
 
 const buildUserFromSession = async () => {
   const session = await fetchAuthSession();
   const idToken = session.tokens.idToken.toString();
+  const accessToken = session.tokens.accessToken.toString();
   const payload = jwtDecode(idToken);
   const groups = payload['cognito:groups'];
   return {
@@ -22,8 +23,8 @@ const buildUserFromSession = async () => {
     sub: payload.sub,
     groups: Array.isArray(groups) ? groups : groups ? [groups] : [],
     idToken,
-    accessToken: session.getAccessToken().getJwtToken(),
-    refreshToken: session.getRefreshToken().getToken()
+    accessToken,
+    refreshToken: session.tokens.refreshToken?.toString()
   };
 };
 
@@ -52,10 +53,15 @@ function App() {
         }
         Amplify.configure({
           Auth: {
-            region: cognito.region,
-            userPoolId: cognito.userPoolId,
-            userPoolWebClientId: cognito.clientId,
-            authenticationFlowType: 'USER_PASSWORD_AUTH'
+            Cognito: {
+              region: cognito.region,
+              userPoolId: cognito.userPoolId,
+              userPoolClientId: cognito.clientId,
+              loginWith: {
+                username: true,
+                email: false
+              }
+            }
           }
         });
         setAuthConfigured(true);
@@ -104,7 +110,7 @@ function App() {
         buildUserFromSession().then((sessionUser) => {
           setUser(sessionUser);
           setActivePage('dashboard');
-        }).catch(() => {});
+        }).catch(() => { });
       }
     };
 
