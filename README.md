@@ -1,8 +1,29 @@
 # n11817143 Video Transcoder
 
-This repository contains a stateless, cloud-native video transcoder application that aligns with the CAB432 assignment requirements. The stack comprises a React frontend, an Express backend, and AWS managed services for authentication, storage, caching, and persistence. All infrastructure and application code are pre-configured for the following university-issued resources:
+This repository contains a stateless, cloud-native video transcoder application that aligns with the CAB432 assignment requirements. The stack comprises a React frontend, an Express backend, and AWS managed services for authentication, storage, caching, and persistence.
+
+## 🚀 Quick Start (Automated)
+
+The application now features **fully automated configuration** that detects your EC2 instance information at startup:
+
+```bash
+# Simple one-command startup
+./start.sh
+```
+
+This automatically:
+- ✅ Detects your EC2 instance ID, IP, and DNS
+- ✅ Generates configuration files
+- ✅ Starts all Docker containers
+
+For more details, see [AUTOMATED_STARTUP.md](AUTOMATED_STARTUP.md)
+
+## 📋 Configuration
+
+All infrastructure and application code are pre-configured for the following university-issued resources:
 
 - **Region:** `ap-southeast-2`
+- **EC2 Instance:** `i-0aaedfc6a70038409` (auto-detected at startup)
 - **Cognito User Pool:** `n11817143-a2` (`ap-southeast-2_CdVnmKfrW`)
 - **S3 Bucket:** `n11817143-a2`
 - **DynamoDB Table:** `n11817143-VideoApp`
@@ -10,7 +31,6 @@ This repository contains a stateless, cloud-native video transcoder application 
 - **Parameter Store Prefix:** `/n11817143/app/`
 - **Secrets Manager Secret:** `n11817143-a2-secret`
 - **Domain Name:** `n11817143-videoapp.cab432.com`
-- **EC2 CNAME Target:** `ec2-3-27-210-9.ap-southeast-2.compute.amazonaws.com`
 
 ## Repository Layout
 
@@ -92,8 +112,10 @@ The application uses **AWS Parameter Store** and **Secrets Manager** for configu
    ```bash
    docker compose up --build
    ```
-   - Backend available at `http://n11817143-videoapp.cab432.com:8080/api`
-   - Frontend served at `http://n11817143-videoapp.cab432.com:3000`
+   - Backend available at `https://n11817143-videoapp.cab432.com:8080/api` (using domain with updated DNS)
+   - Frontend served at `https://n11817143-videoapp.cab432.com:3000` (using domain with updated DNS)
+   
+   **Note**: The application now uses instance ID `i-0aaedfc6a70038409` to automatically resolve the public DNS and IP addresses. The Route53 DNS record will be updated automatically via Terraform to point to the correct EC2 instance.
 
 ### Configuration Details
 
@@ -186,8 +208,9 @@ aws sts get-caller-identity --profile cab432
    ```
 
 5. **Domain access**:
-   - Frontend: `http://n11817143-videoapp.cab432.com:3000`
-   - Backend API: `http://n11817143-videoapp.cab432.com:8080/api`
+   - Frontend: `http://13.210.12.3:3000` (current working URL)
+   - Backend API: `http://13.210.12.3:8080/api` (current working URL)
+   - Domain `http://n11817143-videoapp.cab432.com:3000` (requires DNS update to work)
 
 The application automatically loads all configuration from AWS services - no manual environment setup required.
 

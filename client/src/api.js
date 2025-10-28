@@ -1,6 +1,6 @@
 import { fetchAuthSession } from 'aws-amplify/auth';
 
-const RAW_API_URL = import.meta.env.VITE_API_URL || 'https://n11817143-videoapp.cab432.com/api';
+const RAW_API_URL = import.meta.env.VITE_API_URL || '/api';
 
 function trimTrailingSlashes(value) {
   if (!value) return '';
@@ -141,34 +141,34 @@ async function publicRequest(path, options) {
 }
 
 const api = {
-  getConfig: () => publicRequest('/api/config'),
-  me: () => authorizedRequest('/api/auth/me'),
-  initiateUpload: (payload) => authorizedRequest('/api/videos/presign', { method: 'POST', body: payload }),
-  finalizeUpload: (payload) => authorizedRequest('/api/videos/finalize', { method: 'POST', body: payload }),
-  listVideos: (page = 1, limit = 10) => authorizedRequest(`/api/videos?page=${page}&limit=${limit}`),
-  getVideo: (id) => authorizedRequest(`/api/videos/${id}`),
+  getConfig: () => publicRequest('/config'),
+  me: () => authorizedRequest('/auth/me'),
+  initiateUpload: (payload) => authorizedRequest('/videos/presign', { method: 'POST', body: payload }),
+  finalizeUpload: (payload) => authorizedRequest('/videos/finalize', { method: 'POST', body: payload }),
+  listVideos: (page = 1, limit = 10) => authorizedRequest(`/videos?page=${page}&limit=${limit}`),
+  getVideo: (id) => authorizedRequest(`/videos/${id}`),
   getStreamUrl: async (id, { variant = 'original', download = false } = {}) => {
     const params = new URLSearchParams({ variant });
     if (download) {
       params.set('download', '1');
     }
-    const response = await authorizedRequest(`/api/videos/${id}/stream?${params.toString()}`);
+    const response = await authorizedRequest(`/videos/${id}/stream?${params.toString()}`);
     return response.url;
   },
-  deleteVideo: (id) => authorizedRequest(`/api/videos/${id}`, { method: 'DELETE' }),
+  deleteVideo: (id) => authorizedRequest(`/videos/${id}`, { method: 'DELETE' }),
 
   // Transcoding endpoints
-  startTranscoding: (id, resolution) => authorizedRequest(`/api/videos/${id}/transcode`, {
+  startTranscoding: (id, resolution) => authorizedRequest(`/videos/${id}/transcode`, {
     method: 'POST',
     body: { resolution }
   }),
-  getTranscodingStatus: (id) => authorizedRequest(`/api/videos/${id}/transcoding-status`),
-  getAvailableResolutions: () => authorizedRequest('/api/videos/transcoding/resolutions'),
+  getTranscodingStatus: (id) => authorizedRequest(`/videos/${id}/transcoding-status`),
+  getAvailableResolutions: () => authorizedRequest('/videos/transcoding/resolutions'),
 
-  listUsers: () => authorizedRequest('/api/admin/users'),
-  deleteUser: (username) => authorizedRequest(`/api/admin/users/${encodeURIComponent(username)}`, { method: 'DELETE' }),
-  listAllVideos: () => authorizedRequest('/api/admin/videos'),
-  deleteAnyVideo: (videoId, userId) => authorizedRequest(`/api/admin/videos/${encodeURIComponent(videoId)}`, {
+  listUsers: () => authorizedRequest('/admin/users'),
+  deleteUser: (username) => authorizedRequest(`/admin/users/${encodeURIComponent(username)}`, { method: 'DELETE' }),
+  listAllVideos: () => authorizedRequest('/admin/videos'),
+  deleteAnyVideo: (videoId, userId) => authorizedRequest(`/admin/videos/${encodeURIComponent(videoId)}`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId })

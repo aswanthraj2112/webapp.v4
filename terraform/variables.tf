@@ -10,6 +10,12 @@ variable "project_prefix" {
   default     = "n11817143"
 }
 
+variable "app_name" {
+  description = "Application name for ECR repositories"
+  type        = string
+  default     = "n11817143-videoapp"
+}
+
 variable "cognito_user_pool_id" {
   description = "Existing Cognito User Pool ID"
   type        = string
@@ -28,10 +34,22 @@ variable "route53_zone_name" {
   default     = "cab432.com"
 }
 
-variable "ec2_public_dns" {
-  description = "Public DNS name of the EC2 instance for the CNAME"
+variable "ec2_instance_id" {
+  description = "EC2 instance ID to generate public DNS name"
   type        = string
-  default     = "ec2-3-27-210-9.ap-southeast-2.compute.amazonaws.com"
+  default     = "i-0aaedfc6a70038409"
+}
+
+variable "ec2_public_dns" {
+  description = "Public DNS name of the EC2 instance for the CNAME (derived from instance ID)"
+  type        = string
+  default     = "ec2-13-210-12-3.ap-southeast-2.compute.amazonaws.com"
+}
+
+variable "ec2_public_ip" {
+  description = "Public IP address of the EC2 instance (derived from instance ID)"
+  type        = string
+  default     = "13.210.12.3"
 }
 
 variable "s3_bucket_name" {

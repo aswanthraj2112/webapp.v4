@@ -177,14 +177,15 @@ resource "aws_elasticache_cluster" "cache" {
 #   private_zone = false
 # }
 
-# Commented out due to IAM permission constraints
-# resource "aws_route53_record" "app" {
-#   zone_id = "Z02680423BHWEVRU2JZDQ"  # cab432.com hosted zone ID
-#   name    = var.domain_name
-#   type    = "CNAME"
-#   ttl     = 300
-#   records = [var.ec2_public_dns]
-# }
+# Route53 record to point domain to current EC2 instance
+# Note: Due to IAM constraints, we use manually specified DNS rather than dynamic lookup
+resource "aws_route53_record" "app" {
+  zone_id = "Z02680423BHWEVRU2JZDQ"  # cab432.com hosted zone ID
+  name    = var.domain_name
+  type    = "CNAME"
+  ttl     = 300
+  records = [var.ec2_public_dns]
+}
 
 output "cognito_user_pool_id" {
   value = var.cognito_user_pool_id
@@ -199,6 +200,79 @@ output "parameter_store_prefix" {
   value = "/${local.parameter_prefix}"
 }
 
+# ECR Repositories
+resource "aws_ecr_repository" "backend" {
+  name = "${var.app_name}-backend"
+  
+  image_tag_mutability = "MUTABLE"
+  
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = merge(var.default_tags, {
+    Name = "${var.app_name}-backend"
+  })
+}
+
+resource "aws_ecr_lifecycle_policy" "backend" {
+  repository = aws_ecr_repository.backend.name
+
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep last 10 images"
+        selection = {
+          tagStatus     = "tagged"
+          tagPrefixList = ["latest"]
+          countType     = "imageCountMoreThan"
+          countNumber   = 10
+        }
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_ecr_repository" "frontend" {
+  name = "${var.app_name}-frontend"
+  
+  image_tag_mutability = "MUTABLE"
+  
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  tags = merge(var.default_tags, {
+    Name = "${var.app_name}-frontend"
+  })
+}
+
+resource "aws_ecr_lifecycle_policy" "frontend" {
+  repository = aws_ecr_repository.frontend.name
+
+  policy = jsonencode({
+    rules = [
+      {
+        rulePriority = 1
+        description  = "Keep last 10 images"
+        selection = {
+          tagStatus     = "tagged"
+          tagPrefixList = ["latest"]
+          countType     = "imageCountMoreThan"
+          countNumber   = 10
+        }
+        action = {
+          type = "expire"
+        }
+      }
+    ]
+  })
+}
+
 output "s3_bucket_name" {
   value = aws_s3_bucket.video.bucket
 }
@@ -210,6 +284,26 @@ output "dynamodb_table_name" {
 output "elasticache_endpoint" {
   value       = local.cache_enabled ? aws_elasticache_cluster.cache[0].configuration_endpoint : ""
   description = "Configuration endpoint for the Memcached cluster. Empty when cache_subnet_ids is not provided."
+}
+
+output "ecr_backend_repository_url" {
+  value = aws_ecr_repository.backend.repository_url
+}
+
+output "ecr_frontend_repository_url" {
+  value = aws_ecr_repository.frontend.repository_url
+}
+
+output "ec2_instance_id" {
+  value = var.ec2_instance_id
+}
+
+output "ec2_public_ip" {
+  value = var.ec2_public_ip
+}
+
+output "ec2_public_dns" {
+  value = var.ec2_public_dns
 }
 
 # Note: Due to IAM permission constraints, the following resources need to be managed manually:

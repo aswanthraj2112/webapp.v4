@@ -6,6 +6,7 @@ import authRoutes from './auth/auth.routes.js';
 import videoRoutes from './videos/video.routes.js';
 import { errorHandler, NotFoundError } from './utils/errors.js';
 import adminRoutes from './admin/admin.routes.js';
+import cacheRoutes from './cache/cache.routes.js';
 
 const app = express();
 
@@ -59,6 +60,7 @@ app.get('/api/config', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/videos', videoRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/cache', cacheRoutes);
 
 app.use((req, res, next) => {
   next(new NotFoundError('Route not found'));
