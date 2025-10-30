@@ -1,0 +1,31 @@
+{
+    "name": "transcode-worker",
+    "version": "1.0.0",
+    "description": "Transcode Worker - SQS consumer for video transcoding jobs",
+    "type": "module",
+    "main": "src/index.js",
+    "scripts": {
+        "start": "node src/index.js",
+        "dev": "nodemon src/index.js",
+        "test": "echo \"Tests not implemented yet\" && exit 0",
+        "lint": "eslint \"src/**/*.js\""
+    },
+    "dependencies": {
+        "@aws-sdk/client-dynamodb": "^3.609.0",
+        "@aws-sdk/client-s3": "^3.609.0",
+        "@aws-sdk/client-secrets-manager": "^3.896.0",
+        "@aws-sdk/client-sqs": "^3.609.0",
+        "@aws-sdk/client-ssm": "^3.609.0",
+        "@aws-sdk/client-cloudwatch": "^3.609.0",
+        "@aws-sdk/lib-dynamodb": "^3.609.0",
+        "dotenv": "^16.4.5",
+        "fluent-ffmpeg": "^2.1.2"
+    },
+    "devDependencies": {
+        "eslint": "^9.7.0",
+        "nodemon": "^3.1.0"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}

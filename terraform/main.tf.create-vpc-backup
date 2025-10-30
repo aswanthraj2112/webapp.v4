@@ -49,44 +49,26 @@ locals {
 }
 
 # ==========================================
-# VPC and Networking - Using Existing Infrastructure
+# VPC and Networking
 # ==========================================
 
-# Reference existing VPC
-data "aws_vpc" "existing" {
-  id = var.vpc_id
+module "vpc" {
+  source = "./modules/vpc"
+
+  project_name       = var.project_name
+  environment        = var.environment
+  vpc_cidr           = var.vpc_cidr
+  availability_zones = local.availability_zones
+  enable_nat_gateway = var.enable_nat_gateway
+  enable_flow_logs   = var.enable_vpc_flow_logs
 }
 
-# Reference existing subnets
-data "aws_subnets" "public" {
-  filter {
-    name   = "vpc-id"
-    values = [var.vpc_id]
-  }
-  filter {
-    name   = "map-public-ip-on-launch"
-    values = ["true"]
-  }
-}
+module "security_groups" {
+  source = "./modules/security-groups"
 
-data "aws_subnets" "private" {
-  filter {
-    name   = "vpc-id"
-    values = [var.vpc_id]
-  }
-  filter {
-    name   = "map-public-ip-on-launch"
-    values = ["false"]
-  }
-}
-
-# Reference existing security groups (QUT managed)
-data "aws_security_group" "cab432_sg" {
-  id = var.cab432_security_group_id
-}
-
-data "aws_security_group" "cab432_memcached_sg" {
-  id = var.cab432_memcached_security_group_id
+  project_name = var.project_name
+  environment  = var.environment
+  vpc_id       = module.vpc.vpc_id
 }
 
 # ==========================================
@@ -98,9 +80,9 @@ module "alb" {
 
   project_name              = var.project_name
   environment               = var.environment
-  vpc_id                    = var.vpc_id
-  public_subnet_ids         = data.aws_subnets.public.ids
-  alb_security_group_id     = data.aws_security_group.cab432_sg.id
+  vpc_id                    = module.vpc.vpc_id
+  public_subnet_ids         = module.vpc.public_subnet_ids
+  alb_security_group_id     = module.security_groups.alb_security_group_id
   certificate_arn           = var.acm_certificate_arn
   enable_deletion_protection = var.enable_alb_deletion_protection
   enable_alarms             = var.enable_cloudwatch_alarms
@@ -157,8 +139,8 @@ module "video_api_service" {
   desired_count      = var.video_api_desired_count
   execution_role_arn = module.ecs_cluster.task_execution_role_arn
   task_role_arn      = module.ecs_cluster.task_role_arn
-  subnet_ids         = data.aws_subnets.private.ids
-  security_group_id  = data.aws_security_group.cab432_sg.id
+  subnet_ids         = module.vpc.private_subnet_ids
+  security_group_id  = module.security_groups.video_api_security_group_id
   assign_public_ip   = !var.enable_nat_gateway
   target_group_arn   = module.alb.video_api_target_group_arn
   log_group_name     = module.ecs_cluster.log_group_name
@@ -213,8 +195,8 @@ module "admin_service" {
   desired_count      = var.admin_service_desired_count
   execution_role_arn = module.ecs_cluster.task_execution_role_arn
   task_role_arn      = module.ecs_cluster.task_role_arn
-  subnet_ids         = data.aws_subnets.private.ids
-  security_group_id  = data.aws_security_group.cab432_sg.id
+  subnet_ids         = module.vpc.private_subnet_ids
+  security_group_id  = module.security_groups.admin_service_security_group_id
   assign_public_ip   = !var.enable_nat_gateway
   target_group_arn   = module.alb.admin_service_target_group_arn
   log_group_name     = module.ecs_cluster.log_group_name
@@ -266,8 +248,8 @@ module "transcode_worker" {
   desired_count      = var.transcode_worker_desired_count
   execution_role_arn = module.ecs_cluster.task_execution_role_arn
   task_role_arn      = module.ecs_cluster.task_role_arn
-  subnet_ids         = data.aws_subnets.private.ids
-  security_group_id  = data.aws_security_group.cab432_sg.id
+  subnet_ids         = module.vpc.private_subnet_ids
+  security_group_id  = module.security_groups.transcode_worker_security_group_id
   assign_public_ip   = !var.enable_nat_gateway
   log_group_name     = module.ecs_cluster.log_group_name
 

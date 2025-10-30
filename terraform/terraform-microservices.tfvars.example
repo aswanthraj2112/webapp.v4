@@ -1,0 +1,69 @@
+# ==========================================
+# Terraform Variables - Microservices
+# Copy this file to terraform.tfvars and customize
+# ==========================================
+
+# Core Configuration
+aws_region   = "ap-southeast-2"
+project_name = "n11817143-videoapp"
+environment  = "prod"
+az_count     = 2
+
+# Network Configuration
+vpc_cidr           = "10.0.0.0/16"
+enable_nat_gateway = true          # Set to false for dev to save costs
+enable_vpc_flow_logs = false       # Enable for production monitoring
+
+# ALB Configuration
+acm_certificate_arn            = ""     # Add your ACM certificate ARN for HTTPS
+enable_alb_deletion_protection = false  # Set to true for production
+
+# ECR Configuration
+enable_ecr_scanning       = true
+ecr_image_retention_count = 10
+
+# ECS Cluster Configuration
+enable_container_insights = true
+log_retention_days        = 7  # Increase for production (30, 60, 90)
+
+# AWS Service Names
+s3_bucket_name      = "n11817143-a2"
+dynamodb_table_name = "n11817143-videos"
+sqs_queue_name      = "n11817143-transcode-queue"
+elasticache_endpoint = ""  # Add if using existing ElastiCache
+
+# Cognito Configuration (REQUIRED)
+cognito_user_pool_id = "ap-southeast-2_XXXXXXXXX"  # CHANGE THIS
+cognito_client_id    = "your-client-id-here"       # CHANGE THIS
+
+# Video API Service
+video_api_image_tag      = "latest"
+video_api_cpu            = 512    # 0.5 vCPU
+video_api_memory         = 1024   # 1 GB
+video_api_desired_count  = 2      # Start with 2 tasks
+video_api_min_capacity   = 1      # Minimum 1 task
+video_api_max_capacity   = 4      # Scale up to 4 tasks
+
+# Admin Service
+admin_service_image_tag      = "latest"
+admin_service_cpu            = 256    # 0.25 vCPU
+admin_service_memory         = 512    # 512 MB
+admin_service_desired_count  = 1      # Start with 1 task
+admin_service_min_capacity   = 1      # Minimum 1 task
+admin_service_max_capacity   = 2      # Scale up to 2 tasks
+
+# Transcode Worker
+transcode_worker_image_tag      = "latest"
+transcode_worker_cpu            = 1024   # 1 vCPU
+transcode_worker_memory         = 2048   # 2 GB
+transcode_worker_desired_count  = 1      # Start with 1 worker
+transcode_worker_min_capacity   = 0      # Can scale to 0 when idle
+transcode_worker_max_capacity   = 3      # Scale up to 3 workers
+
+# Auto-scaling Configuration
+enable_autoscaling       = true
+autoscaling_cpu_target    = 70   # Target 70% CPU
+autoscaling_memory_target = 80   # Target 80% memory
+
+# Monitoring
+enable_cloudwatch_alarms = true

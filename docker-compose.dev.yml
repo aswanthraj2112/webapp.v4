@@ -1,0 +1,262 @@
+version: '3.8'
+
+services:
+  # ==========================================
+  # LocalStack - AWS Services Emulation
+  # ==========================================
+  localstack:
+    image: localstack/localstack:latest
+    container_name: localstack
+    ports:
+      - "4566:4566" # LocalStack Gateway
+      - "4510-4559:4510-4559" # External services port range
+    environment:
+      - SERVICES=s3,sqs,dynamodb,secretsmanager,ssm
+      - DEBUG=1
+      - DATA_DIR=/tmp/localstack/data
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - AWS_DEFAULT_REGION=ap-southeast-2
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    volumes:
+      - "./localstack-init:/etc/localstack/init/ready.d"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "localstack-data:/tmp/localstack"
+    networks:
+      - microservices
+
+  # ==========================================
+  # Memcached - Cache Service
+  # ==========================================
+  memcached:
+    image: memcached:1.6-alpine
+    container_name: memcached
+    ports:
+      - "11211:11211"
+    command: memcached -m 64
+    networks:
+      - microservices
+
+  # ==========================================
+  # Video API Service
+  # ==========================================
+  video-api:
+    build:
+      context: ./server/services/video-api
+      dockerfile: Dockerfile
+    container_name: video-api
+    ports:
+      - "8080:8080"
+    environment:
+      # Server Config
+      - NODE_ENV=development
+      - PORT=8080
+
+      # AWS Config
+      - AWS_REGION=ap-southeast-2
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_ENDPOINT=http://localstack:4566
+
+      # DynamoDB
+      - DYNAMODB_TABLE_NAME=n11817143-videos
+      - DYNAMODB_ENDPOINT=http://localstack:4566
+
+      # S3
+      - S3_BUCKET_NAME=n11817143-a2
+      - S3_ENDPOINT=http://localstack:4566
+      - S3_FORCE_PATH_STYLE=true
+
+      # SQS
+      - SQS_QUEUE_URL=http://localstack:4566/000000000000/n11817143-transcode-queue
+
+      # Cognito (using real AWS for now - LocalStack Cognito is limited)
+      - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
+      - COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}
+      - COGNITO_REGION=ap-southeast-2
+
+      # Cache
+      - ELASTICACHE_ENDPOINT=memcached:11211
+      - CACHE_TTL=300
+
+      # Secrets
+      - USE_PARAMETER_STORE=false
+      - JWT_SECRET=dev-jwt-secret-change-in-production
+    volumes:
+      - ./server/services/video-api/src:/app/src
+      - ./server/shared:/app/shared
+    depends_on:
+      - localstack
+      - memcached
+    networks:
+      - microservices
+    healthcheck:
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/healthz" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ==========================================
+  # Admin Service
+  # ==========================================
+  admin-service:
+    build:
+      context: ./server/services/admin-service
+      dockerfile: Dockerfile
+    container_name: admin-service
+    ports:
+      - "8081:8081"
+    environment:
+      # Server Config
+      - NODE_ENV=development
+      - PORT=8081
+
+      # AWS Config
+      - AWS_REGION=ap-southeast-2
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_ENDPOINT=http://localstack:4566
+
+      # DynamoDB
+      - DYNAMODB_TABLE_NAME=n11817143-videos
+      - DYNAMODB_ENDPOINT=http://localstack:4566
+
+      # S3
+      - S3_BUCKET_NAME=n11817143-a2
+      - S3_ENDPOINT=http://localstack:4566
+      - S3_FORCE_PATH_STYLE=true
+
+      # Cognito
+      - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
+      - COGNITO_CLIENT_ID=${COGNITO_CLIENT_ID}
+      - COGNITO_REGION=ap-southeast-2
+
+      # Secrets
+      - USE_PARAMETER_STORE=false
+      - JWT_SECRET=dev-jwt-secret-change-in-production
+    volumes:
+      - ./server/services/admin-service/src:/app/src
+      - ./server/shared:/app/shared
+    depends_on:
+      - localstack
+    networks:
+      - microservices
+    healthcheck:
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8081/healthz" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ==========================================
+  # Transcode Worker
+  # ==========================================
+  transcode-worker:
+    build:
+      context: ./server/services/transcode-worker
+      dockerfile: Dockerfile
+    container_name: transcode-worker
+    environment:
+      # AWS Config
+      - AWS_REGION=ap-southeast-2
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_ENDPOINT=http://localstack:4566
+
+      # DynamoDB
+      - DYNAMODB_TABLE_NAME=n11817143-videos
+      - DYNAMODB_ENDPOINT=http://localstack:4566
+
+      # S3
+      - S3_BUCKET_NAME=n11817143-a2
+      - S3_ENDPOINT=http://localstack:4566
+      - S3_FORCE_PATH_STYLE=true
+
+      # SQS
+      - SQS_QUEUE_URL=http://localstack:4566/000000000000/n11817143-transcode-queue
+      - SQS_WAIT_TIME_SECONDS=20
+      - SQS_VISIBILITY_TIMEOUT=600
+      - SQS_MAX_MESSAGES=1
+
+      # Processing Config
+      - MAX_FILE_SIZE=524288000
+      - TEMP_DIR=/tmp/transcode
+
+      # Secrets
+      - USE_PARAMETER_STORE=false
+    volumes:
+      - ./server/services/transcode-worker/src:/app/src
+      - ./server/shared:/app/shared
+      - transcode-temp:/tmp/transcode
+    depends_on:
+      - localstack
+    networks:
+      - microservices
+    restart: unless-stopped
+
+  # ==========================================
+  # S3-to-SQS Lambda (Development Mode)
+  # ==========================================
+  s3-lambda:
+    build:
+      context: ./lambda/s3-to-sqs
+      dockerfile: Dockerfile.dev
+    container_name: s3-lambda
+    environment:
+      - AWS_REGION=ap-southeast-2
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_ENDPOINT=http://localstack:4566
+      - SQS_QUEUE_URL=http://localstack:4566/000000000000/n11817143-transcode-queue
+      - S3_BUCKET_NAME=n11817143-a2
+    volumes:
+      - ./lambda/s3-to-sqs:/var/task
+    depends_on:
+      - localstack
+    networks:
+      - microservices
+    command: [ "node", "test-handler.js" ]
+
+  # ==========================================
+  # Client (React/Vite)
+  # ==========================================
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      target: development
+    container_name: client
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8080/api
+      - VITE_ADMIN_API_URL=http://localhost:8081/api
+    volumes:
+      - ./client/src:/app/src
+      - ./client/public:/app/public
+      - ./client/index.html:/app/index.html
+      - ./client/vite.config.js:/app/vite.config.js
+    depends_on:
+      - video-api
+      - admin-service
+    networks:
+      - microservices
+    command: npm run dev
+
+# ==========================================
+# Networks
+# ==========================================
+networks:
+  microservices:
+    driver: bridge
+    name: microservices-network
+
+# ==========================================
+# Volumes
+# ==========================================
+volumes:
+  localstack-data:
+    name: localstack-data
+  transcode-temp:
+    name: transcode-temp

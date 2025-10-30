@@ -1,0 +1,16 @@
+{
+    "name": "s3-to-sqs-lambda",
+    "version": "1.0.0",
+    "description": "Lambda function to handle S3 events and queue transcode jobs",
+    "type": "module",
+    "main": "index.js",
+    "scripts": {
+        "test": "echo \"Tests not implemented yet\" && exit 0"
+    },
+    "dependencies": {
+        "@aws-sdk/client-sqs": "^3.609.0"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}

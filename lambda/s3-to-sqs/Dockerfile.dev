@@ -1,0 +1,19 @@
+# Development Dockerfile for testing Lambda locally
+# This is NOT the production Lambda container image
+
+FROM node:18-alpine
+
+WORKDIR /var/task
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci --only=production
+
+# Copy Lambda function code
+COPY index.js ./
+COPY test-handler.js ./
+
+# Default command (can be overridden)
+CMD ["node", "test-handler.js"]
