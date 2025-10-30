@@ -4,17 +4,24 @@ FROM node:18-alpine
 # Set working directory
 WORKDIR /app
 
-# Copy shared utilities
-COPY server/shared ./shared
+# Copy shared package.json and install shared dependencies first
+COPY server/shared/package*.json ./server/shared/
+WORKDIR /app/server/shared
+RUN npm install --omit=dev
 
-# Copy service package files
-COPY server/services/admin-service/package*.json ./
+# Copy service package files and install service dependencies
+WORKDIR /app
+COPY server/services/admin-service/package*.json ./server/services/admin-service/
+WORKDIR /app/server/services/admin-service
+RUN npm install --omit=dev
 
-# Install dependencies
-RUN npm ci --only=production
+# Copy shared utilities and service source code
+WORKDIR /app
+COPY server/shared ./server/shared
+COPY server/services/admin-service/src ./server/services/admin-service/src
 
-# Copy service source code
-COPY server/services/admin-service/src ./src
+# Set working directory to service
+WORKDIR /app/server/services/admin-service
 
 # Set environment variables
 ENV NODE_ENV=production

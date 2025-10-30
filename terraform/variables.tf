@@ -87,6 +87,12 @@ variable "acm_certificate_arn" {
   default     = ""
 }
 
+variable "domain_name" {
+  description = "Base domain name (e.g., n11817143-videoapp.cab432.com)"
+  type        = string
+  default     = ""
+}
+
 variable "enable_alb_deletion_protection" {
   description = "Enable deletion protection for ALB"
   type        = bool

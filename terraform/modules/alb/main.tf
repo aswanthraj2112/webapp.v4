@@ -53,7 +53,7 @@ resource "aws_lb_target_group" "video_api" {
 # Target Group for Admin Service
 resource "aws_lb_target_group" "admin_service" {
   name        = "${var.project_name}-admin-service-tg"
-  port        = 8081
+  port        = 8080
   protocol    = "HTTP"
   vpc_id      = var.vpc_id
   target_type = "ip"

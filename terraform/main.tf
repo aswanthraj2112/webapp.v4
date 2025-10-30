@@ -15,7 +15,7 @@ terraform {
 
 provider "aws" {
   region = var.aws_region
-  
+
   default_tags {
     tags = {
       "qut-username" = "n11817143@qut.edu.au"
@@ -37,13 +37,20 @@ data "aws_availability_zones" "available" {
 locals {
   account_id         = data.aws_caller_identity.current.account_id
   availability_zones = slice(data.aws_availability_zones.available.names, 0, var.az_count)
-  
+
+  # Select unique public subnets (one per AZ) - ALB requires unique AZs
+  unique_public_subnet_ids = [
+    "subnet-04cc288ea3b2e1e53", # ap-southeast-2a
+    "subnet-075811427d5564cf9", # ap-southeast-2b
+    "subnet-05d0352bb15852524", # ap-southeast-2c
+  ]
+
   common_tags = {
-    Project       = var.project_name
-    Environment   = var.environment
-    ManagedBy     = "Terraform"
-    Student       = "n11817143"
-    Assignment    = "CAB432-A3"
+    Project        = var.project_name
+    Environment    = var.environment
+    ManagedBy      = "Terraform"
+    Student        = "n11817143"
+    Assignment     = "CAB432-A3"
     "qut-username" = "n11817143@qut.edu.au"
   }
 }
@@ -80,6 +87,25 @@ data "aws_subnets" "private" {
   }
 }
 
+# ==========================================
+# Cognito - Use Existing User Pool
+# ==========================================
+
+# Reference existing Cognito User Pool
+data "aws_cognito_user_pool" "existing" {
+  user_pool_id = "ap-southeast-2_CdVnmKfrW"
+}
+
+# Use the n11817143-a2-public-client
+data "aws_cognito_user_pool_client" "existing" {
+  user_pool_id = data.aws_cognito_user_pool.existing.id
+  client_id    = "296uu7cjlfinpnspc04kp53p83"
+}
+
+# ==========================================
+# Security Groups
+# ==========================================
+
 # Reference existing security groups (QUT managed)
 data "aws_security_group" "cab432_sg" {
   id = var.cab432_security_group_id
@@ -96,14 +122,14 @@ data "aws_security_group" "cab432_memcached_sg" {
 module "alb" {
   source = "./modules/alb"
 
-  project_name              = var.project_name
-  environment               = var.environment
-  vpc_id                    = var.vpc_id
-  public_subnet_ids         = data.aws_subnets.public.ids
-  alb_security_group_id     = data.aws_security_group.cab432_sg.id
-  certificate_arn           = var.acm_certificate_arn
+  project_name               = var.project_name
+  environment                = var.environment
+  vpc_id                     = var.vpc_id
+  public_subnet_ids          = local.unique_public_subnet_ids
+  alb_security_group_id      = data.aws_security_group.cab432_sg.id
+  certificate_arn            = var.acm_certificate_arn
   enable_deletion_protection = var.enable_alb_deletion_protection
-  enable_alarms             = var.enable_cloudwatch_alarms
+  enable_alarms              = var.enable_cloudwatch_alarms
 }
 
 # ==========================================
@@ -113,10 +139,10 @@ module "alb" {
 module "ecr" {
   source = "./modules/ecr"
 
-  project_name           = var.project_name
-  environment            = var.environment
-  enable_image_scanning  = var.enable_ecr_scanning
-  image_retention_count  = var.ecr_image_retention_count
+  project_name          = var.project_name
+  environment           = var.environment
+  enable_image_scanning = var.enable_ecr_scanning
+  image_retention_count = var.ecr_image_retention_count
 }
 
 # ==========================================
@@ -157,25 +183,27 @@ module "video_api_service" {
   desired_count      = var.video_api_desired_count
   execution_role_arn = module.ecs_cluster.task_execution_role_arn
   task_role_arn      = module.ecs_cluster.task_role_arn
-  subnet_ids         = data.aws_subnets.private.ids
+  subnet_ids         = data.aws_subnets.public.ids
   security_group_id  = data.aws_security_group.cab432_sg.id
   assign_public_ip   = !var.enable_nat_gateway
   target_group_arn   = module.alb.video_api_target_group_arn
   log_group_name     = module.ecs_cluster.log_group_name
+  enable_logging     = true  # Temporarily enable for debugging
 
   environment_variables = {
-    NODE_ENV                = var.environment
-    PORT                    = "8080"
-    AWS_REGION              = var.aws_region
-    DYNAMODB_TABLE_NAME     = var.dynamodb_table_name
-    S3_BUCKET_NAME          = var.s3_bucket_name
-    SQS_QUEUE_URL           = "https://sqs.${var.aws_region}.amazonaws.com/${local.account_id}/${var.sqs_queue_name}"
-    COGNITO_USER_POOL_ID    = var.cognito_user_pool_id
-    COGNITO_CLIENT_ID       = var.cognito_client_id
-    COGNITO_REGION          = var.aws_region
-    ELASTICACHE_ENDPOINT    = var.elasticache_endpoint
-    CACHE_TTL               = "300"
-    USE_PARAMETER_STORE     = "false"
+    NODE_ENV             = var.environment
+    PORT                 = "8080"
+    AWS_REGION           = var.aws_region
+    DYNAMODB_TABLE_NAME  = var.dynamodb_table_name
+    S3_BUCKET_NAME       = var.s3_bucket_name
+    SQS_QUEUE_URL        = "https://sqs.${var.aws_region}.amazonaws.com/${local.account_id}/${var.sqs_queue_name}"
+    COGNITO_USER_POOL_ID = data.aws_cognito_user_pool.existing.id
+    COGNITO_CLIENT_ID    = data.aws_cognito_user_pool_client.existing.id
+    COGNITO_REGION       = var.aws_region
+    ELASTICACHE_ENDPOINT = var.elasticache_endpoint
+    CACHE_TTL            = "300"
+    USE_PARAMETER_STORE  = "false"
+    CLIENT_ORIGINS       = "https://app.${var.domain_name},https://${var.domain_name}"
   }
 
   secrets = [
@@ -185,12 +213,12 @@ module "video_api_service" {
     }
   ]
 
-  enable_autoscaling    = var.enable_autoscaling
-  min_capacity          = var.video_api_min_capacity
-  max_capacity          = var.video_api_max_capacity
-  cpu_target_value      = var.autoscaling_cpu_target
-  memory_target_value   = var.autoscaling_memory_target
-  enable_alarms         = var.enable_cloudwatch_alarms
+  enable_autoscaling  = var.enable_autoscaling
+  min_capacity        = var.video_api_min_capacity
+  max_capacity        = var.video_api_max_capacity
+  cpu_target_value    = var.autoscaling_cpu_target
+  memory_target_value = var.autoscaling_memory_target
+  enable_alarms       = var.enable_cloudwatch_alarms
 }
 
 # ==========================================
@@ -207,28 +235,30 @@ module "admin_service" {
   cluster_id         = module.ecs_cluster.cluster_id
   cluster_name       = module.ecs_cluster.cluster_name
   container_image    = "${module.ecr.admin_service_repository_url}:${var.admin_service_image_tag}"
-  container_port     = 8081
+  container_port     = 8080
   task_cpu           = var.admin_service_cpu
   task_memory        = var.admin_service_memory
   desired_count      = var.admin_service_desired_count
   execution_role_arn = module.ecs_cluster.task_execution_role_arn
   task_role_arn      = module.ecs_cluster.task_role_arn
-  subnet_ids         = data.aws_subnets.private.ids
+  subnet_ids         = data.aws_subnets.public.ids
   security_group_id  = data.aws_security_group.cab432_sg.id
   assign_public_ip   = !var.enable_nat_gateway
   target_group_arn   = module.alb.admin_service_target_group_arn
   log_group_name     = module.ecs_cluster.log_group_name
+  enable_logging     = true  # Temporarily enable for debugging
 
   environment_variables = {
-    NODE_ENV              = var.environment
-    PORT                  = "8081"
-    AWS_REGION            = var.aws_region
-    DYNAMODB_TABLE_NAME   = var.dynamodb_table_name
-    S3_BUCKET_NAME        = var.s3_bucket_name
-    COGNITO_USER_POOL_ID  = var.cognito_user_pool_id
-    COGNITO_CLIENT_ID     = var.cognito_client_id
-    COGNITO_REGION        = var.aws_region
-    USE_PARAMETER_STORE   = "false"
+    NODE_ENV             = var.environment
+    PORT                 = "8080"
+    AWS_REGION           = var.aws_region
+    DYNAMODB_TABLE_NAME  = var.dynamodb_table_name
+    S3_BUCKET_NAME       = var.s3_bucket_name
+    COGNITO_USER_POOL_ID = data.aws_cognito_user_pool.existing.id
+    COGNITO_CLIENT_ID    = data.aws_cognito_user_pool_client.existing.id
+    COGNITO_REGION       = var.aws_region
+    USE_PARAMETER_STORE  = "false"
+    CLIENT_ORIGINS       = "https://app.${var.domain_name},https://${var.domain_name}"
   }
 
   secrets = [
@@ -260,28 +290,29 @@ module "transcode_worker" {
   cluster_id         = module.ecs_cluster.cluster_id
   cluster_name       = module.ecs_cluster.cluster_name
   container_image    = "${module.ecr.transcode_worker_repository_url}:${var.transcode_worker_image_tag}"
-  container_port     = 0  # No port - worker doesn't accept connections
+  container_port     = 0 # No port - worker doesn't accept connections
   task_cpu           = var.transcode_worker_cpu
   task_memory        = var.transcode_worker_memory
   desired_count      = var.transcode_worker_desired_count
   execution_role_arn = module.ecs_cluster.task_execution_role_arn
   task_role_arn      = module.ecs_cluster.task_role_arn
-  subnet_ids         = data.aws_subnets.private.ids
+  subnet_ids         = data.aws_subnets.public.ids
   security_group_id  = data.aws_security_group.cab432_sg.id
   assign_public_ip   = !var.enable_nat_gateway
   log_group_name     = module.ecs_cluster.log_group_name
+  enable_logging     = true  # Temporarily enable for debugging
 
   environment_variables = {
-    AWS_REGION                = var.aws_region
-    DYNAMODB_TABLE_NAME       = var.dynamodb_table_name
-    S3_BUCKET_NAME            = var.s3_bucket_name
-    SQS_QUEUE_URL             = "https://sqs.${var.aws_region}.amazonaws.com/${local.account_id}/${var.sqs_queue_name}"
-    SQS_WAIT_TIME_SECONDS     = "20"
-    SQS_VISIBILITY_TIMEOUT    = "600"
-    SQS_MAX_MESSAGES          = "1"
-    MAX_FILE_SIZE             = "524288000"
-    TEMP_DIR                  = "/tmp/transcode"
-    USE_PARAMETER_STORE       = "false"
+    AWS_REGION             = var.aws_region
+    DYNAMODB_TABLE_NAME    = var.dynamodb_table_name
+    S3_BUCKET_NAME         = var.s3_bucket_name
+    SQS_QUEUE_URL          = "https://sqs.${var.aws_region}.amazonaws.com/${local.account_id}/${var.sqs_queue_name}"
+    SQS_WAIT_TIME_SECONDS  = "20"
+    SQS_VISIBILITY_TIMEOUT = "600"
+    SQS_MAX_MESSAGES       = "1"
+    MAX_FILE_SIZE          = "524288000"
+    TEMP_DIR               = "/tmp/transcode"
+    USE_PARAMETER_STORE    = "false"
   }
 
   health_check_command = ["CMD-SHELL", "ps aux | grep 'node.*index.js' | grep -v grep || exit 1"]
@@ -292,4 +323,19 @@ module "transcode_worker" {
   cpu_target_value    = var.autoscaling_cpu_target
   memory_target_value = var.autoscaling_memory_target
   enable_alarms       = var.enable_cloudwatch_alarms
+}
+
+# ==========================================
+# Static Website (S3 + CloudFront)
+# ==========================================
+
+module "static_website" {
+  source = "./modules/s3-static-website"
+
+  project_name        = var.project_name
+  environment         = var.environment
+  acm_certificate_arn = "arn:aws:acm:us-east-1:901444280953:certificate/3e304793-a3b9-4d8d-9953-74f366cd3453"
+  cloudfront_aliases  = ["app.${var.domain_name}"]
+  create_oac          = false
+  existing_oac_id     = "E2H9DXFI7YLTIM"  # Reuse existing OAC from account
 }

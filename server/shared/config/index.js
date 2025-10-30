@@ -31,7 +31,7 @@ const config = {
     PARAMETER_PREFIX: '/n11817143/app/',
 
     // Cognito configuration
-    COGNITO_USER_POOL_ID: 'ap-southeast-2_CdVnmKfrW',
+    COGNITO_USER_POOL_ID: process.env.COGNITO_USER_POOL_ID || 'ap-southeast-2_CdVnmKfW',
     COGNITO_CLIENT_ID: process.env.COGNITO_CLIENT_ID || null,
 
     // Storage & persistence

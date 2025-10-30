@@ -35,14 +35,16 @@ resource "aws_ecs_task_definition" "main" {
 
       secrets = var.secrets
 
-      logConfiguration = {
+      # QUT Guideline: Log collection should be disabled for ECS tasks
+      # Conditionally include logConfiguration only if explicitly enabled
+      logConfiguration = var.enable_logging ? {
         logDriver = "awslogs"
         options = {
           "awslogs-group"         = var.log_group_name
           "awslogs-region"        = var.aws_region
           "awslogs-stream-prefix" = var.service_name
         }
-      }
+      } : null
 
       healthCheck = var.health_check_command != null ? {
         command     = var.health_check_command

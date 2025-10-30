@@ -42,6 +42,17 @@ app.get('/healthz', (req, res) => {
     });
 });
 
+// Configuration endpoint for frontend
+app.get('/api/config', (req, res) => {
+    res.status(200).json({
+        cognito: {
+            region: config.AWS_REGION,
+            userPoolId: config.COGNITO_USER_POOL_ID,
+            clientId: config.COGNITO_CLIENT_ID
+        }
+    });
+});
+
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/videos', videoRoutes);

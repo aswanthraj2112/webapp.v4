@@ -7,17 +7,24 @@ RUN apk add --no-cache ffmpeg
 # Set working directory
 WORKDIR /app
 
-# Copy shared utilities
-COPY server/shared ./shared
+# Copy shared package.json and install shared dependencies first
+COPY server/shared/package*.json ./server/shared/
+WORKDIR /app/server/shared
+RUN npm install --omit=dev
 
-# Copy service package files
-COPY server/services/transcode-worker/package*.json ./
+# Copy service package files and install service dependencies
+WORKDIR /app
+COPY server/services/transcode-worker/package*.json ./server/services/transcode-worker/
+WORKDIR /app/server/services/transcode-worker
+RUN npm install --omit=dev
 
-# Install dependencies
-RUN npm ci --only=production
+# Copy shared utilities and service source code
+WORKDIR /app
+COPY server/shared ./server/shared
+COPY server/services/transcode-worker/src ./server/services/transcode-worker/src
 
-# Copy service source code
-COPY server/services/transcode-worker/src ./src
+# Set working directory to service
+WORKDIR /app/server/services/transcode-worker
 
 # Set environment variables
 ENV NODE_ENV=production

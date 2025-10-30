@@ -8,7 +8,7 @@ const PARAM_PREFIX = '/n11817143/app/';
 const FALLBACK_CONFIG = {
     REGION,
     COGNITO_CLIENT_ID: process.env.COGNITO_CLIENT_ID || '',
-    COGNITO_USER_POOL_ID: 'ap-southeast-2_CdVnmKfrW',
+    COGNITO_USER_POOL_ID: process.env.COGNITO_USER_POOL_ID || 'ap-southeast-2_CdVnmKfW',
     DOMAIN_NAME: 'n11817143-videoapp.cab432.com',
     DYNAMO_TABLE: 'n11817143-VideoApp',
     DYNAMO_OWNER_INDEX: process.env.DYNAMO_OWNER_INDEX || 'ownerId-index',

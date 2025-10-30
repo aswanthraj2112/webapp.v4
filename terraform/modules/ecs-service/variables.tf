@@ -100,6 +100,12 @@ variable "log_group_name" {
   type        = string
 }
 
+variable "enable_logging" {
+  description = "Enable CloudWatch logging (QUT guideline: should be disabled)"
+  type        = bool
+  default     = false
+}
+
 variable "environment_variables" {
   description = "Environment variables for container"
   type        = map(string)

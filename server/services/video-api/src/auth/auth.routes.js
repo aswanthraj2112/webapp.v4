@@ -1,8 +1,8 @@
 import express from 'express';
 import { z } from 'zod';
-import asyncHandler from '../../../shared/utils/asyncHandler.js';
-import { validateBody } from '../../../shared/utils/validate.js';
-import { authenticate } from '../../../shared/auth/middleware.js';
+import asyncHandler from '../../../../shared/utils/asyncHandler.js';
+import { validateBody } from '../../../../shared/utils/validate.js';
+import { authenticate } from '../../../../shared/auth/middleware.js';
 import {
     signUp,
     signIn,
