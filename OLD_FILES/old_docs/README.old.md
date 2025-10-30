@@ -1,410 +1,206 @@
-# 🎬 Video Processing Web Application - CAB432 Assignment 3# 🎥 Video Platform - Microservices Architecture# n11817143 Video Transcoder
+# 🎥 Video Platform - Microservices Architecture# n11817143 Video Transcoder
 
 
 
-[![AWS](https://img.shields.io/badge/AWS-ECS%20Fargate-FF9900?logo=amazon-aws)](https://aws.amazon.com/fargate/)
-
-[![Terraform](https://img.shields.io/badge/Terraform-1.5%2B-7B42BC?logo=terraform)](https://www.terraform.io/)
-
-[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)](https://reactjs.org/)A scalable, cloud-native video platform built with microservices architecture, deployed on AWS ECS Fargate with automated CI/CD.This repository contains a stateless, cloud-native video transcoder application that aligns with the CAB432 assignment requirements. The stack comprises a React frontend, an Express backend, and AWS managed services for authentication, storage, caching, and persistence.
-
-[![Node.js](https://img.shields.io/badge/Node.js-18-339933?logo=node.js)](https://nodejs.org/)
+A scalable, cloud-native video platform built with microservices architecture, deployed on AWS ECS Fargate with automated CI/CD.This repository contains a stateless, cloud-native video transcoder application that aligns with the CAB432 assignment requirements. The stack comprises a React frontend, an Express backend, and AWS managed services for authentication, storage, caching, and persistence.
 
 
-
-A cloud-native video processing application built with microservices architecture on AWS, featuring user authentication, video upload, transcoding, and playback capabilities.
 
 [![Video API](https://img.shields.io/badge/video--api-active-green)](https://github.com/aswanthraj2112/webapp.v4)## 🚀 Quick Start (Automated)
 
-## 🚀 Live Application
-
 [![Admin Service](https://img.shields.io/badge/admin--service-active-green)](https://github.com/aswanthraj2112/webapp.v4)
 
-- **Frontend**: [https://app.n11817143-videoapp.cab432.com](https://app.n11817143-videoapp.cab432.com)
+[![Transcode Worker](https://img.shields.io/badge/transcode--worker-active-green)](https://github.com/aswanthraj2112/webapp.v4)The application now features **fully automated configuration** that detects your EC2 instance information at startup:
 
-- **Backend API**: [https://n11817143-videoapp.cab432.com/api](https://n11817143-videoapp.cab432.com/api)[![Transcode Worker](https://img.shields.io/badge/transcode--worker-active-green)](https://github.com/aswanthraj2112/webapp.v4)The application now features **fully automated configuration** that detects your EC2 instance information at startup:
+[![AWS ECS](https://img.shields.io/badge/AWS-ECS%20Fargate-orange)](https://aws.amazon.com/ecs/)
 
+[![Terraform](https://img.shields.io/badge/IaC-Terraform-purple)](https://www.terraform.io/)```bash
 
+# Simple one-command startup
 
-## 📋 Table of Contents[![AWS ECS](https://img.shields.io/badge/AWS-ECS%20Fargate-orange)](https://aws.amazon.com/ecs/)
-
-
-
-- [Architecture](#-architecture)[![Terraform](https://img.shields.io/badge/IaC-Terraform-purple)](https://www.terraform.io/)```bash
-
-- [Features](#-features)
-
-- [Tech Stack](#-tech-stack)# Simple one-command startup
-
-- [Project Structure](#-project-structure)
-
-- [Prerequisites](#-prerequisites)---./start.sh
-
-- [Deployment](#-deployment)
-
-- [Usage](#-usage)```
-
-- [Scripts](#-scripts)
-
-- [Monitoring](#-monitoring)## 📋 Table of Contents
-
-
-
-## 🏗️ ArchitectureThis automatically:
-
-
-
-### High-Level Overview- [Overview](#overview)- ✅ Detects your EC2 instance ID, IP, and DNS
-
-
-
-```- [Architecture](#architecture)- ✅ Generates configuration files
-
-Users
-
-  │- [Features](#features)- ✅ Starts all Docker containers
-
-  ├──► CloudFront (CDN) ──► S3 (React Frontend)
-
-  │- [Microservices](#microservices)
-
-  └──► Route53 (DNS) ──► ALB (HTTPS) ──┬──► Video API Service (ECS Fargate)
-
-                                        ├──► Admin Service (ECS Fargate)- [Tech Stack](#tech-stack)For more details, see [AUTOMATED_STARTUP.md](AUTOMATED_STARTUP.md)
-
-                                        └──► Transcode Worker (ECS Fargate)
-
-                                                  │- [Getting Started](#getting-started)
-
-                                        ┌─────────┴─────────┐
-
-                                        │                   │- [Deployment](#deployment)## 📋 Configuration
-
-                                   DynamoDB    S3       Cognito    SQS
-
-                                   (Metadata) (Videos)  (Auth)   (Queue)- [API Documentation](#api-documentation)
+---./start.sh
 
 ```
+
+## 📋 Table of Contents
+
+This automatically:
+
+- [Overview](#overview)- ✅ Detects your EC2 instance ID, IP, and DNS
+
+- [Architecture](#architecture)- ✅ Generates configuration files
+
+- [Features](#features)- ✅ Starts all Docker containers
+
+- [Microservices](#microservices)
+
+- [Tech Stack](#tech-stack)For more details, see [AUTOMATED_STARTUP.md](AUTOMATED_STARTUP.md)
+
+- [Getting Started](#getting-started)
+
+- [Deployment](#deployment)## 📋 Configuration
+
+- [API Documentation](#api-documentation)
 
 - [Monitoring](#monitoring)All infrastructure and application code are pre-configured for the following university-issued resources:
 
-### Microservices
-
 - [Testing](#testing)
 
-1. **Video API** - Authentication, video metadata, upload/download
-
-2. **Admin Service** - Administrative operations- [Documentation](#documentation)- **Region:** `ap-southeast-2`
-
-3. **Transcode Worker** - Asynchronous video processing with FFmpeg
+- [Documentation](#documentation)- **Region:** `ap-southeast-2`
 
 - **EC2 Instance:** `i-0aaedfc6a70038409` (auto-detected at startup)
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed architecture documentation.
-
 ---- **Cognito User Pool:** `n11817143-a2` (`ap-southeast-2_CdVnmKfrW`)
-
-## ✨ Features
 
 - **S3 Bucket:** `n11817143-a2`
 
-- ✅ User Authentication (Cognito with MFA)
+## 🎯 Overview- **DynamoDB Table:** `n11817143-VideoApp`
 
-- ✅ Video Upload (Direct S3 with presigned URLs)## 🎯 Overview- **DynamoDB Table:** `n11817143-VideoApp`
+- **ElastiCache Cluster:** `n11817143-a2-cache` (`n11817143-a2-cache.km2jzi.cfg.apse2.cache.amazonaws.com`)
 
-- ✅ Automatic Transcoding (360p, 480p, 720p)
+This project demonstrates a complete migration from monolithic to microservices architecture for a video platform. It showcases modern cloud-native development practices including:- **Parameter Store Prefix:** `/n11817143/app/`
 
-- ✅ Video Playback with quality selection- **ElastiCache Cluster:** `n11817143-a2-cache` (`n11817143-a2-cache.km2jzi.cfg.apse2.cache.amazonaws.com`)
-
-- ✅ Responsive React UI
-
-- ✅ HTTPS with ACM certificatesThis project demonstrates a complete migration from monolithic to microservices architecture for a video platform. It showcases modern cloud-native development practices including:- **Parameter Store Prefix:** `/n11817143/app/`
-
-- ✅ CloudFront CDN
-
-- ✅ ECS Fargate (serverless containers)- **Secrets Manager Secret:** `n11817143-a2-secret`
-
-- ✅ Auto-scaling
+- **Secrets Manager Secret:** `n11817143-a2-secret`
 
 - **Microservices Architecture** - Independent, scalable services- **Domain Name:** `n11817143-videoapp.cab432.com`
 
-## 🛠️ Tech Stack
-
 - **Containerization** - Docker containers for all services
 
-**Frontend**: React 18, Vite, AWS Amplify, CloudFront, S3  
+- **Orchestration** - AWS ECS Fargate for container management## Repository Layout
 
-**Backend**: Node.js 18, Express, FFmpeg, AWS SDK  - **Orchestration** - AWS ECS Fargate for container management## Repository Layout
+- **Infrastructure as Code** - Terraform for AWS resources
 
-**Infrastructure**: ECS Fargate, ALB, Cognito, S3, DynamoDB, SQS, ECR, Route53, ACM  
+- **CI/CD** - GitHub Actions for automated deployments| Path | Description |
 
-**IaC**: Terraform  - **Infrastructure as Code** - Terraform for AWS resources
+- **Auto-scaling** - Dynamic scaling based on load| ---- | ----------- |
 
+- **Monitoring** - CloudWatch metrics and logs| `client/` | React application served by Nginx and configured with AWS Amplify for Cognito auth and S3 uploads. |
 
+| `server/` | Express API that validates Cognito JWTs, issues S3 presigned URLs, stores metadata in DynamoDB, and caches listings in Memcached. |
 
-## 📁 Project Structure- **CI/CD** - GitHub Actions for automated deployments| Path | Description |
+**Student:** n11817143  | `docker-compose.yml` | Local orchestration of the frontend and backend services. |
 
+**Course:** CAB432 - Cloud Computing  | `terraform/` | Terraform configuration that provisions the AWS resources listed above and writes runtime configuration to SSM & Secrets Manager. |
 
-
-```- **Auto-scaling** - Dynamic scaling based on load| ---- | ----------- |
-
-webapp.v5/
-
-├── client/              # React frontend- **Monitoring** - CloudWatch metrics and logs| `client/` | React application served by Nginx and configured with AWS Amplify for Cognito auth and S3 uploads. |
-
-├── server/              # Backend microservices
-
-│   ├── services/| `server/` | Express API that validates Cognito JWTs, issues S3 presigned URLs, stores metadata in DynamoDB, and caches listings in Memcached. |
-
-│   │   ├── video-api/
-
-│   │   ├── admin-service/**Student:** n11817143  | `docker-compose.yml` | Local orchestration of the frontend and backend services. |
-
-│   │   └── transcode-worker/
-
-│   └── shared/          # Shared utilities**Course:** CAB432 - Cloud Computing  | `terraform/` | Terraform configuration that provisions the AWS resources listed above and writes runtime configuration to SSM & Secrets Manager. |
-
-├── terraform/           # Infrastructure as Code
-
-│   ├── main.tf**University:** Queensland University of Technology| `Dockerfile` | Legacy single-image build (unused once docker-compose is adopted). |
-
-│   ├── modules/
-
-│   └── terraform.tfvars
-
-├── scripts/             # Utility scripts
-
-├── lambda/              # Lambda functions---## Prerequisites
-
-├── docs/                # Documentation
-
-├── status.sh            # Check deployment status
-
-├── API_REFERENCE.md
-
-├── ARCHITECTURE.md## 🏗️ ArchitectureBefore deploying, install and configure the following tools on your workstation or CI environment:
-
-└── README.md
-
-```
+**University:** Queensland University of Technology| `Dockerfile` | Legacy single-image build (unused once docker-compose is adopted). |
 
 
 
-## 📦 Prerequisites### High-Level Architecture1. **Node.js 22.0+ and npm 10+** – required if you need to lint or run either service directly.
+---## Prerequisites
 
 
 
-- AWS Account with CAB432 access2. **Docker Engine & Docker Compose Plugin** – required for local development and for building the container images.
-
-- AWS CLI configured (`aws sso login --profile cab432`)
-
-- Terraform >= 1.5.0```3. **Terraform 1.5+** – used to provision cloud infrastructure.
-
-- Docker
-
-- Node.js 18+                                    ┌─────────────────┐4. **AWS CLI v2** – configure it with an IAM user/role that has permission to manage S3, DynamoDB, Cognito, ElastiCache, Secrets Manager, SSM Parameter Store, and Route 53 in account `901444280953`.
+## 🏗️ ArchitectureBefore deploying, install and configure the following tools on your workstation or CI environment:
 
 
 
-## 🚀 Deployment                                    │   Internet      │
+### High-Level Architecture1. **Node.js 22.0+ and npm 10+** – required if you need to lint or run either service directly.
 
+2. **Docker Engine & Docker Compose Plugin** – required for local development and for building the container images.
 
+```3. **Terraform 1.5+** – used to provision cloud infrastructure.
 
-### Quick Start                                    └────────┬────────┘> **Tip:** Run `aws configure --profile cab432` to create a dedicated named profile, then export `AWS_PROFILE=cab432` before invoking Terraform or Docker builds that rely on the CLI.
+                                    ┌─────────────────┐4. **AWS CLI v2** – configure it with an IAM user/role that has permission to manage S3, DynamoDB, Cognito, ElastiCache, Secrets Manager, SSM Parameter Store, and Route 53 in account `901444280953`.
 
+                                    │   Internet      │
 
+                                    └────────┬────────┘> **Tip:** Run `aws configure --profile cab432` to create a dedicated named profile, then export `AWS_PROFILE=cab432` before invoking Terraform or Docker builds that rely on the CLI.
 
-```bash                                             │
+                                             │
 
-# 1. Clone and configure
+                                    ┌────────▼────────┐## Bootstrap AWS Infrastructure
 
-git clone https://github.com/aswanthraj2112/webapp.v4.git                                    ┌────────▼────────┐## Bootstrap AWS Infrastructure
-
-cd webapp.v4
-
-git checkout webapp.v5                                    │  Application    │
-
-export AWS_PROFILE=cab432
+                                    │  Application    │
 
                                     │  Load Balancer  │Terraform is the single source of truth for infrastructure. It creates or reuses the named AWS services and writes application configuration parameters.
 
-# 2. Deploy infrastructure
+                                    └────────┬────────┘
 
-cd terraform                                    └────────┬────────┘
+                                             │```bash
 
-terraform init
+                    ┌────────────────────────┼────────────────────────┐cd terraform
 
-terraform apply                                             │```bash
+                    │                        │                        │terraform init
 
+           ┌────────▼────────┐    ┌─────────▼────────┐    ┌─────────▼────────┐terraform validate
 
+           │   Video API     │    │  Admin Service   │    │ Transcode Worker │terraform plan -out tfplan
 
-# 3. Build and push images                    ┌────────────────────────┼────────────────────────┐cd terraform
-
-cd ..
-
-./scripts/build-and-push.sh all                    │                        │                        │terraform init
-
-
-
-# 4. Deploy frontend           ┌────────▼────────┐    ┌─────────▼────────┐    ┌─────────▼────────┐terraform validate
-
-cd client
-
-npm install && npm run build           │   Video API     │    │  Admin Service   │    │ Transcode Worker │terraform plan -out tfplan
-
-aws s3 sync dist/ s3://n11817143-app-static-website/ --delete
-
-aws cloudfront create-invalidation --distribution-id E3MBOUQVWZEHJQ --paths "/*"           │   (ECS Fargate) │    │  (ECS Fargate)   │    │  (ECS Fargate)   │terraform apply tfplan
-
-```
+           │   (ECS Fargate) │    │  (ECS Fargate)   │    │  (ECS Fargate)   │terraform apply tfplan
 
            └────────┬────────┘    └─────────┬────────┘    └─────────┬────────┘```
 
-## 🎯 Usage
-
                     │                       │                        │
 
-1. Visit [https://app.n11817143-videoapp.cab432.com](https://app.n11817143-videoapp.cab432.com)
+                    └───────────────────────┼────────────────────────┘Key behaviour:
 
-2. Sign in with existing account or sign up                    └───────────────────────┼────────────────────────┘Key behaviour:
+                                            │
 
-3. Upload videos (MP4, MOV, AVI)
+                    ┌───────────────────────┴────────────────────────┐- The module **reuses** the existing Cognito User Pool (`ap-southeast-2_CdVnmKfrW`) and creates a new app client; the client ID is exported and written to SSM.
 
-4. View transcoded videos with quality options                                            │
+                    │                                                 │- A **private S3 bucket** (`n11817143-a2`) is created with versioning and SSE enabled.
 
-
-
-## 📜 Scripts                    ┌───────────────────────┴────────────────────────┐- The module **reuses** the existing Cognito User Pool (`ap-southeast-2_CdVnmKfrW`) and creates a new app client; the client ID is exported and written to SSM.
-
-
-
-### Check Status                    │                                                 │- A **private S3 bucket** (`n11817143-a2`) is created with versioning and SSE enabled.
-
-```bash
-
-./status.sh         ┌──────────▼──────────┐                        ┌────────────▼────────┐- A **DynamoDB table** (`n11817143-VideoApp`) is created with PAY_PER_REQUEST billing.
-
-```
+         ┌──────────▼──────────┐                        ┌────────────▼────────┐- A **DynamoDB table** (`n11817143-VideoApp`) is created with PAY_PER_REQUEST billing.
 
          │   AWS Services      │                        │  S3 + Lambda        │- A **Memcached ElastiCache cluster** (`n11817143-a2-cache`) is provisioned when subnet and security group IDs are provided via `-var` or `.tfvars`.
 
-### Build and Push Images
+         │  • DynamoDB         │                        │  • Video Storage    │- Application configuration is stored beneath `/n11817143/app/` in Parameter Store, and the Cognito client secret is stored in Secrets Manager (`n11817143-a2-secret`).
 
-```bash         │  • DynamoDB         │                        │  • Video Storage    │- Application configuration is stored beneath `/n11817143/app/` in Parameter Store, and the Cognito client secret is stored in Secrets Manager (`n11817143-a2-secret`).
+         │  • S3               │                        │  • Event Trigger    │- A public CNAME record `n11817143-videoapp.cab432.com` is pointed at `ec2-3-107-100-58.ap-southeast-2.compute.amazonaws.com`.
 
-./scripts/build-and-push.sh [video-api|admin-service|transcode-worker|all]
+         │  • SQS              │                        │  • SQS Queue        │
 
-```         │  • S3               │                        │  • Event Trigger    │- A public CNAME record `n11817143-videoapp.cab432.com` is pointed at `ec2-3-107-100-58.ap-southeast-2.compute.amazonaws.com`.
-
-
-
-### Gather AWS Info         │  • SQS              │                        │  • SQS Queue        │
-
-```bash
-
-./scripts/gather-aws-info.sh         │  • Cognito          │                        └─────────────────────┘> **Optional inputs:** Provide `cache_subnet_ids` and `cache_security_group_ids` if the default VPC does not meet assignment requirements. All variables have defaults that match the assignment specification, but they can be overridden via `terraform.tfvars` or `-var` flags.
-
-```
+         │  • Cognito          │                        └─────────────────────┘> **Optional inputs:** Provide `cache_subnet_ids` and `cache_security_group_ids` if the default VPC does not meet assignment requirements. All variables have defaults that match the assignment specification, but they can be overridden via `terraform.tfvars` or `-var` flags.
 
          └─────────────────────┘
 
-## 📊 Monitoring
-
 ```After `terraform apply` completes, the application will automatically load configuration from Parameter Store and Secrets Manager. You can verify the configuration is accessible:
 
-```bash
-
-# Check ECS services
-
-aws ecs describe-services --cluster n11817143-app-cluster \
-
-  --services n11817143-app-video-api --region ap-southeast-2### Service Communication```bash
 
 
+### Service Communication```bash
 
-# Check Cognito users# Verify Parameter Store configuration
+# Verify Parameter Store configuration
 
-aws cognito-idp list-users --user-pool-id ap-southeast-2_CdVnmKfrW \
+```npm --prefix server run params:status
 
-  --region ap-southeast-2```npm --prefix server run params:status
+User Request → ALB → Video API → DynamoDB/S3/Cognito
 
+                  ↓# Optional: View all parameters (for troubleshooting)
 
+              Admin Service → DynamoDB/Cognitoaws ssm get-parameters-by-path \
 
-# Test endpointsUser Request → ALB → Video API → DynamoDB/S3/Cognito
+                  ↓  --path /n11817143/app/ \
 
-curl https://n11817143-videoapp.cab432.com/api/config
+        S3 Upload → Lambda → SQS → Transcode Worker → S3  --with-decryption \
 
-```                  ↓# Optional: View all parameters (for troubleshooting)
+```  --profile cab432
 
 
 
-## 🏷️ Resource Tags              Admin Service → DynamoDB/Cognitoaws ssm get-parameters-by-path \
+---# Optional: View JWT secret (for troubleshooting)
 
+aws secretsmanager get-secret-value \
 
+## ✨ Features  --secret-id n11817143-a2-secret \
 
-All resources tagged with:                  ↓  --path /n11817143/app/ \
+  --profile cab432
 
-- `qut-username: n11817143@qut.edu.au`
+### Core Features```
 
-- `Project: CAB432-VideoApp`        S3 Upload → Lambda → SQS → Transcode Worker → S3  --with-decryption \
-
-- `Environment: production`
-
-- `ManagedBy: Terraform````  --profile cab432
-
-
-
-## 🔐 Security
-
-
-
-- HTTPS enforced---# Optional: View JWT secret (for troubleshooting)
-
-- Cognito authentication
-
-- S3 CORS configuredaws secretsmanager get-secret-value \
-
-- Security groups restrict access
-
-- Secrets in Parameter Store## ✨ Features  --secret-id n11817143-a2-secret \
-
-
-
-## 💰 Cost Optimization  --profile cab432
-
-
-
-- ECS Fargate: Pay per use### Core Features```
-
-- Scale services to 0 when not needed
-
-- CloudFront caching reduces origin requests- ✅ **User Authentication** - JWT-based with AWS Cognito
-
-- S3 lifecycle policies for old files
+- ✅ **User Authentication** - JWT-based with AWS Cognito
 
 - ✅ **Video Upload** - Direct upload to S3 with metadata storageNo manual configuration is required - the application loads all settings dynamically.
 
-## 👤 Author
-
 - ✅ **Video Transcoding** - Automatic background processing with FFmpeg
 
-**Student**: n11817143@qut.edu.au  
-
-**Course**: CAB432 - Cloud Computing  - ✅ **Video Streaming** - Serve transcoded videos from S3## Local Development
-
-**Institution**: Queensland University of Technology  
+- ✅ **Video Streaming** - Serve transcoded videos from S3## Local Development
 
 - ✅ **Admin Dashboard** - User and video management
 
-## 📚 Documentation
-
 - ✅ **RESTful API** - Complete API for all operationsThe application uses **AWS Parameter Store** and **Secrets Manager** for configuration, eliminating the need for manual .env file management. All configuration is loaded dynamically at runtime.
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) - Detailed architecture
 
-- [API_REFERENCE.md](API_REFERENCE.md) - API endpoints
-
-- [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) - All docs
 
 ### Cloud Features### Quick Start
 

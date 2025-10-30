@@ -1,701 +1,551 @@
-# 🏗️ Architecture Overview
+# 🏗️ Architecture Documentation
 
-Complete architecture documentation for the Video Platform microservices.
+## Overview
 
----
+This document provides a comprehensive overview of the video processing application's architecture, deployed on AWS using a microservices pattern with ECS Fargate.
 
 ## Table of Contents
-1. [High-Level Architecture](#high-level-architecture)
-2. [Service Communication](#service-communication)
+
+1. [Architecture Diagram](#architecture-diagram)
+2. [Components](#components)
 3. [Data Flow](#data-flow)
-4. [Infrastructure Components](#infrastructure-components)
-5. [Security Architecture](#security-architecture)
-6. [Scaling Strategy](#scaling-strategy)
-7. [Disaster Recovery](#disaster-recovery)
+4. [Infrastructure](#infrastructure)
+5. [Security](#security)
+6. [Scalability](#scalability)
+7. [Monitoring](#monitoring)
 
----
-
-## High-Level Architecture
+## Architecture Diagram
 
 ```
-                                    USERS
-                                      │
-                                      ▼
-                          ┌───────────────────────┐
-                          │   Internet Gateway    │
-                          └───────────┬───────────┘
-                                      │
-                                      ▼
-                          ┌───────────────────────┐
-                          │ Application Load      │
-                          │ Balancer (ALB)        │
-                          │  - Port 80 routing    │
-                          │  - Health checks      │
-                          │  - SSL termination    │
-                          └──────────┬────────────┘
-                                     │
-               ┌─────────────────────┼─────────────────────┐
-               │                     │                     │
-               ▼                     ▼                     ▼
-    ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
-    │  Video API       │  │  Admin Service   │  │  Client (React)  │
-    │  ECS Service     │  │  ECS Service     │  │  ECS Service     │
-    │  - Auth          │  │  - User mgmt     │  │  - Vite build    │
-    │  - Video CRUD    │  │  - System stats  │  │  - Nginx serve   │
-    │  - Upload        │  │  - Monitoring    │  │  - SPA routing   │
-    │  1-5 tasks       │  │  1-3 tasks       │  │  1-2 tasks       │
-    └────────┬─────────┘  └────────┬─────────┘  └──────────────────┘
-             │                     │
-             └──────────┬──────────┘
-                        │
-                        ▼
-              ┌─────────────────┐
-              │   Amazon SQS    │
-              │ transcode-queue │
-              │  - FIFO order   │
-              │  - Dead letter  │
-              └────────┬────────┘
-                       │
-                       ▼
-              ┌─────────────────┐
-              │ Transcode Worker│
-              │  ECS Service    │
-              │  - FFmpeg       │
-              │  - Thumbnails   │
-              │  1-10 tasks     │
-              └────────┬────────┘
-                       │
-         ┌─────────────┼─────────────┬────────────┐
-         ▼             ▼             ▼            ▼
-    ┌────────┐   ┌──────────┐  ┌────────┐  ┌──────────┐
-    │   S3   │   │ DynamoDB │  │  ECR   │  │CloudWatch│
-    │ Videos │   │  Tables  │  │ Images │  │   Logs   │
-    │Thumbs  │   │ - videos │  │ x5     │  │ Metrics  │
-    └────┬───┘   │ - users  │  └────────┘  └──────────┘
-         │       └──────────┘
-         │
-         ▼
-    ┌────────────┐
-    │  Lambda    │
-    │ S3-Event   │
-    │ Processor  │
-    └────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                           USERS                                   │
+│                  (Global / Australia)                             │
+└────────────┬──────────────────────────────────┬──────────────────┘
+             │                                   │
+             │ HTTPS                             │ HTTPS
+             ▼                                   ▼
+    ┌────────────────┐                  ┌───────────────┐
+    │   Route 53     │                  │   Route 53    │
+    │   (DNS)        │                  │   (DNS)       │
+    │ app.n11817143  │                  │  n11817143    │
+    │ -videoapp...   │                  │  -videoapp... │
+    └────────┬───────┘                  └───────┬───────┘
+             │                                   │
+             ▼                                   ▼
+    ┌────────────────┐                  ┌───────────────────┐
+    │  CloudFront    │                  │  ACM Certificate  │
+    │  Distribution  │                  │  (Wildcard)       │
+    │  E3MBOUQVWZE.. │                  │  *.n11817143-     │
+    │  TLS 1.2+      │                  │  videoapp...      │
+    └────────┬───────┘                  └───────┬───────────┘
+             │                                   │
+             ▼                                   ▼
+    ┌────────────────┐                  ┌───────────────────┐
+    │  S3 Bucket     │                  │  Application      │
+    │  n11817143-    │                  │  Load Balancer    │
+    │  app-static-   │                  │  n11817143-app-   │
+    │  website       │                  │  alb              │
+    │  (React SPA)   │                  │  HTTPS:443        │
+    └────────────────┘                  └───────┬───────────┘
+                                                 │
+                         ┌───────────────────────┼──────────────────┐
+                         │                       │                  │
+                         ▼                       ▼                  ▼
+              ┌──────────────────┐   ┌──────────────────┐  ┌──────────────────┐
+              │  Video API       │   │  Admin Service   │  │  Transcode       │
+              │  ECS Service     │   │  ECS Service     │  │  Worker          │
+              │  Port: 8080      │   │  Port: 8080      │  │  ECS Service     │
+              │  Path: /api/*    │   │  Path: /api/admin│  │  No ALB          │
+              │  Tasks: 1-10     │   │  Tasks: 1-5      │  │  Tasks: 1-5      │
+              └──────────┬───────┘   └──────────┬───────┘  └──────────┬───────┘
+                         │                       │                     │
+                         │   AWS Fargate (Serverless Container Platform)
+                         │                       │                     │
+    ┌────────────────────┴───────────────────────┴─────────────────────┴─────┐
+    │                                                                          │
+    │  ┌─────────────┐  ┌──────────────┐  ┌──────────┐  ┌────────┐  ┌─────┐│
+    │  │  Amazon     │  │  Amazon      │  │ Amazon  │  │ Amazon │  │ ECR ││
+    │  │  Cognito    │  │  DynamoDB    │  │   S3    │  │  SQS   │  │     ││
+    │  │  (Auth)     │  │  (Metadata)  │  │(Videos) │  │(Queue) │  │     ││
+    │  │             │  │              │  │         │  │        │  │     ││
+    │  │ User Pool:  │  │ Table:       │  │ Bucket: │  │ Queue: │  │ 3   ││
+    │  │ n11817143-a2│  │ n11817143-a2 │  │n11817143│  │transcode│ │repos││
+    │  │             │  │              │  │   -a2   │  │        │  │     ││
+    │  └─────────────┘  └──────────────┘  └──────────┘  └────────┘  └─────┘│
+    │                                                                          │
+    └──────────────────────────────────────────────────────────────────────────┘
 ```
 
----
+## Components
 
-## Service Communication
+### 1. Frontend Layer
 
-### 1. Client → Video API
-**Protocol:** HTTP/HTTPS  
-**Port:** 80 (ALB) → 4000 (container)  
-**Authentication:** JWT Bearer Token  
+#### CloudFront Distribution
+- **ID**: E3MBOUQVWZEHJQ
+- **Domain**: d39r13oq9jampl.cloudfront.net
+- **Custom Domain**: app.n11817143-videoapp.cab432.com
+- **Purpose**: Global CDN for React application
+- **Features**:
+  - TLS 1.2+ encryption
+  - Automatic HTTPS redirect
+  - SPA routing (403/404 → index.html)
+  - Origin Access Control (OAC) to S3
+  - Cache invalidation support
 
+#### S3 Static Website
+- **Bucket**: n11817143-app-static-website
+- **Purpose**: Host React build files
+- **Configuration**:
+  - Website hosting enabled
+  - Public access blocked (CloudFront only)
+  - Versioning enabled
+  - CORS configured
+
+#### React Application
+- **Framework**: React 18
+- **Build Tool**: Vite
+- **Features**:
+  - AWS Amplify authentication
+  - Video upload/playback
+  - Responsive design
+  - API integration
+
+### 2. Backend Layer
+
+#### Application Load Balancer
+- **Name**: n11817143-app-alb
+- **DNS**: n11817143-app-alb-1811658624.ap-southeast-2.elb.amazonaws.com
+- **Custom Domain**: n11817143-videoapp.cab432.com
+- **Listeners**:
+  - HTTP:80 → Redirect to HTTPS
+  - HTTPS:443 → Route to target groups
+- **Routing Rules**:
+  - `/api/admin/*` → Admin Service
+  - `/api/*` → Video API
+  - Default → Video API
+- **Health Checks**:
+  - Path: `/healthz`
+  - Interval: 30s
+  - Healthy threshold: 2
+  - Unhealthy threshold: 3
+
+#### ECS Cluster
+- **Name**: n11817143-app-cluster
+- **Launch Type**: FARGATE
+- **Platform Version**: LATEST
+- **Networking**: AWS VPC with public subnets
+
+### 3. Microservices
+
+#### Video API Service
 ```
-Client → ALB → Video API
-  POST /api/auth/login
-  GET  /api/videos
-  POST /api/videos/upload
-  GET  /api/videos/:id
-  DELETE /api/videos/:id
+Name: n11817143-app-video-api
+Port: 8080
+CPU: 512 (0.5 vCPU)
+Memory: 1024 MB
+Tasks: 1 (Desired), 1-10 (Auto-scaling)
+Image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11817143-app/video-api:latest
 ```
 
-### 2. Client → Admin Service
-**Protocol:** HTTP/HTTPS  
-**Port:** 80 (ALB) → 5000 (container)  
-**Authentication:** JWT Bearer Token (Admin only)  
+**Responsibilities**:
+- User authentication (Cognito integration)
+- Video metadata CRUD (DynamoDB)
+- Generate presigned S3 URLs for upload
+- Video listing and retrieval
+- Health check endpoint
 
+**Endpoints**:
+- `GET /healthz` - Health check
+- `GET /api/config` - Frontend configuration (Cognito details)
+- `POST /api/auth/signup` - User registration
+- `POST /api/auth/signin` - User login
+- `GET /api/videos` - List user videos
+- `POST /api/videos` - Create video metadata
+- `GET /api/videos/:id` - Get video details
+- `DELETE /api/videos/:id` - Delete video
+
+**Environment Variables**:
+- `COGNITO_USER_POOL_ID`: ap-southeast-2_CdVnmKfrW
+- `COGNITO_CLIENT_ID`: 296uu7cjlfinpnspc04kp53p83
+- `DYNAMODB_TABLE_NAME`: n11817143-a2
+- `S3_BUCKET_NAME`: n11817143-a2
+- `SQS_QUEUE_URL`: Transcode queue URL
+- `CLIENT_ORIGINS`: CORS allowed origins
+
+#### Admin Service
 ```
-Client → ALB → Admin Service
-  GET  /api/admin/users
-  GET  /api/admin/users/:id
-  DELETE /api/admin/users/:id
-  GET  /api/admin/stats
+Name: n11817143-app-admin-service
+Port: 8080
+CPU: 512 (0.5 vCPU)
+Memory: 1024 MB
+Tasks: 1 (Desired), 1-5 (Auto-scaling)
+Image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11817143-app/admin-service:latest
 ```
 
-### 3. Video API → SQS
-**Protocol:** AWS SDK (HTTPS)  
-**Queue:** transcode-queue.fifo  
-**Message Format:** JSON  
+**Responsibilities**:
+- Administrative operations
+- User management
+- System monitoring
+- Analytics
 
-```javascript
-{
-  "videoId": "video123",
-  "s3Key": "videos/original/video123.mp4",
-  "userId": "user123",
-  "metadata": {
-    "title": "My Video",
-    "resolution": "1920x1080"
+**Endpoints**:
+- `GET /healthz` - Health check
+- `GET /api/admin/users` - List all users
+- `GET /api/admin/stats` - System statistics
+
+#### Transcode Worker
+```
+Name: n11817143-app-transcode-worker
+CPU: 1024 (1 vCPU)
+Memory: 2048 MB
+Tasks: 1 (Desired), 1-5 (Auto-scaling)
+Image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11817143-app/transcode-worker:latest
+```
+
+**Responsibilities**:
+- Poll SQS queue for transcode jobs
+- Download video from S3
+- Transcode with FFmpeg (360p, 480p, 720p)
+- Upload transcoded videos to S3
+- Update DynamoDB metadata
+- Delete SQS message on completion
+
+**Process**:
+1. Listen to SQS queue
+2. Receive message with video ID
+3. Download raw video from S3
+4. Transcode to multiple resolutions
+5. Upload to S3: `transcoded/{videoId}/{resolution}.mp4`
+6. Update DynamoDB with transcode status
+7. Delete SQS message
+
+### 4. Storage Layer
+
+#### Amazon S3
+- **Bucket**: n11817143-a2
+- **Purpose**: Video storage
+- **Structure**:
+  ```
+  n11817143-a2/
+  ├── raw/{videoId}/original.{ext}           # Original uploads
+  └── transcoded/{videoId}/
+      ├── 360p.mp4                           # Low quality
+      ├── 480p.mp4                           # Medium quality
+      └── 720p.mp4                           # High quality
+  ```
+- **CORS Configuration**:
+  ```json
+  {
+    "AllowedOrigins": [
+      "https://app.n11817143-videoapp.cab432.com",
+      "https://n11817143-videoapp.cab432.com",
+      "http://localhost:3000"
+    ],
+    "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3000
   }
-}
-```
+  ```
 
-### 4. Transcode Worker → SQS
-**Protocol:** AWS SDK (HTTPS)  
-**Polling:** Long polling (20s wait time)  
-**Batch Size:** 1 message at a time  
-**Visibility Timeout:** 600s (10 minutes)
+#### Amazon DynamoDB
+- **Table**: n11817143-a2
+- **Key Schema**:
+  - Partition Key: `PK` (String) - Format: `USER#{username}`
+  - Sort Key: `SK` (String) - Format: `VIDEO#{videoId}` or `METADATA#{username}`
+- **Attributes**:
+  - `videoId` - UUID
+  - `title` - Video title
+  - `description` - Video description
+  - `status` - upload|processing|completed|failed
+  - `uploadDate` - ISO timestamp
+  - `rawS3Key` - Original video S3 key
+  - `transcodedVersions` - Map of resolution → S3 key
+  - `duration` - Video duration in seconds
+  - `size` - File size in bytes
 
-### 5. S3 → Lambda → SQS
-**Trigger:** S3 ObjectCreated:* events  
-**Protocol:** S3 Event Notification → Lambda → SQS SDK  
+#### Amazon SQS
+- **Queue**: n11817143-transcode-queue
+- **Purpose**: Decouple video upload from transcoding
+- **Message Format**:
+  ```json
+  {
+    "videoId": "uuid",
+    "userId": "username",
+    "s3Key": "raw/{videoId}/original.mp4"
+  }
+  ```
+- **Visibility Timeout**: 3600s (1 hour)
+- **Message Retention**: 4 days
 
-```javascript
-S3 Event → Lambda Handler → Parse Event → Validate → Queue to SQS
-```
+### 5. Authentication
 
-### 6. Services → DynamoDB
-**Protocol:** AWS SDK (HTTPS)  
-**Tables:** videos, users  
-**Access Pattern:** Point lookups, scans, queries  
+#### Amazon Cognito
+- **User Pool**: n11817143-a2
+- **ID**: ap-southeast-2_CdVnmKfrW
+- **Client**: n11817143-a2-public-client
+- **Client ID**: 296uu7cjlfinpnspc04kp53p83
+- **Features**:
+  - Email-based authentication
+  - MFA support (TOTP)
+  - Password policy: 8+ chars, uppercase, lowercase, numbers, symbols
+  - Account recovery via email
 
-```
-Video API ←→ DynamoDB (videos, users)
-Admin Service ←→ DynamoDB (users, stats)
-Transcode Worker ←→ DynamoDB (videos - update status)
-```
+**Authentication Flow**:
+1. Frontend calls `/api/config` to get Cognito details
+2. User signs up/signs in via AWS Amplify
+3. Cognito returns JWT tokens (ID, Access, Refresh)
+4. Frontend includes ID token in API requests
+5. Backend verifies JWT with Cognito public keys
+6. Backend extracts user identity from token
 
----
+### 6. Container Registry
+
+#### Amazon ECR
+- **Repositories**:
+  1. `n11817143-app/video-api`
+  2. `n11817143-app/admin-service`
+  3. `n11817143-app/transcode-worker`
+- **Image Tag Strategy**: `latest` for current production
+- **Scan on Push**: Enabled
+- **Lifecycle Policy**: Keep last 10 images
 
 ## Data Flow
 
 ### Video Upload Flow
 
 ```
-1. User authenticates
-   Client → Video API: POST /api/auth/login
-   Response: JWT token
-
-2. User uploads video
-   Client → Video API: POST /api/videos/upload (multipart/form-data)
-   Video API → S3: Upload original video
-   Video API → DynamoDB: Create video record (status: "processing")
-   Response: { videoId, status: "processing" }
-
-3. S3 triggers Lambda
-   S3 → Lambda: ObjectCreated event
-   Lambda → SQS: Queue transcode job
-
-4. Worker processes video
-   Transcode Worker → SQS: Poll for messages
-   Transcode Worker → S3: Download original video
-   Transcode Worker: FFmpeg transcoding (720p, 480p, 360p)
-   Transcode Worker: FFmpeg thumbnail extraction
-   Transcode Worker → S3: Upload transcoded videos + thumbnail
-   Transcode Worker → DynamoDB: Update status to "completed"
-
-5. User retrieves video
-   Client → Video API: GET /api/videos/:id
-   Video API → DynamoDB: Fetch video metadata
-   Response: { videoId, status: "completed", urls: {...} }
-
-6. User plays video
-   Client → S3: Direct video stream (presigned URL or public)
+1. User clicks "Upload Video" in React app
+2. Frontend calls POST /api/videos with metadata
+3. Video API:
+   - Validates user authentication
+   - Generates unique videoId
+   - Creates DynamoDB record (status: uploading)
+   - Generates S3 presigned URL (PUT)
+   - Returns presigned URL to frontend
+4. Frontend uploads video directly to S3 using presigned URL
+5. S3 upload completes
+6. Frontend calls PATCH /api/videos/:id (status: processing)
+7. Video API:
+   - Updates DynamoDB (status: processing)
+   - Sends message to SQS queue
+8. Transcode Worker:
+   - Polls SQS, receives message
+   - Downloads video from S3
+   - Transcodes to 360p, 480p, 720p
+   - Uploads transcoded versions to S3
+   - Updates DynamoDB (status: completed, add transcode keys)
+   - Deletes SQS message
 ```
 
-### Authentication Flow
+### Video Playback Flow
 
 ```
-1. User signup
-   Client → Video API: POST /api/auth/signup
-   Video API → Cognito: Create user (or DynamoDB)
-   Video API → DynamoDB: Store user metadata
-   Response: { userId, email }
-
-2. User login
-   Client → Video API: POST /api/auth/login
-   Video API → Cognito: Authenticate (or DynamoDB + bcrypt)
-   Video API: Generate JWT token
-   Response: { token, user }
-
-3. Authenticated request
-   Client → Video API: GET /api/videos (Authorization: Bearer <token>)
-   Video API: Validate JWT (auth.middleware.js)
-   Video API: Extract userId from token
-   Video API → DynamoDB: Fetch videos
-   Response: { videos: [...] }
+1. User opens "My Videos" page
+2. Frontend calls GET /api/videos
+3. Video API:
+   - Verifies authentication
+   - Queries DynamoDB for user's videos
+   - Returns list with metadata
+4. User clicks on a video
+5. Frontend calls GET /api/videos/:id
+6. Video API:
+   - Fetches video details from DynamoDB
+   - Generates S3 presigned URLs (GET) for each quality
+   - Returns video details + presigned URLs
+7. Frontend displays video player with quality selector
+8. User selects quality and plays video from S3
 ```
 
-### Admin Operations Flow
+## Infrastructure
 
-```
-1. Admin login
-   Client → Admin Service: POST /api/admin/login
-   Admin Service: Validate admin credentials
-   Response: { token, adminUser }
+### AWS Regions
+- **Primary**: ap-southeast-2 (Sydney)
+- **CloudFront**: Global edge locations
+- **ACM Certificates**:
+  - ap-southeast-2: For ALB
+  - us-east-1: For CloudFront (required)
 
-2. List all users
-   Client → Admin Service: GET /api/admin/users
-   Admin Service: Validate admin token
-   Admin Service → DynamoDB: Scan users table
-   Response: { users: [...], total }
+### Networking
 
-3. View system stats
-   Client → Admin Service: GET /api/admin/stats
-   Admin Service → DynamoDB: Query videos, users
-   Admin Service → CloudWatch: Fetch metrics (optional)
-   Response: { users: {...}, videos: {...}, system: {...} }
-```
+#### VPC
+- **ID**: vpc-007bab53289655834
+- **CIDR**: (QUT-managed)
+- **Subnets**:
+  - Public: subnet-05d0352bb15852524, subnet-04cc288ea3b2e1e53, subnet-075811427d5564cf9
+  - Private: subnet-08e89ff0d9b49c9ae, subnet-07ea9e4f9cc9159ca
+- **Availability Zones**: ap-southeast-2a, 2b, 2c
 
----
+#### Security Groups
+- **CAB432SG** (sg-032bd1ff8cf77dbb9):
+  - Inbound: 8080 (HTTP from ALB)
+  - Outbound: All traffic
+- **ALB Security Group**:
+  - Inbound: 80, 443 (from 0.0.0.0/0)
+  - Outbound: 8080 (to ECS tasks)
 
-## Infrastructure Components
+### DNS Configuration
 
-### Amazon ECS (Elastic Container Service)
+#### Route53 Records
+- **Hosted Zone**: Z02680423BHWEVRU2JZDQ (cab432.com)
+- **Records**:
+  1. **A Record (Alias)**: `n11817143-videoapp.cab432.com` → ALB
+  2. **A Record (Alias)**: `app.n11817143-videoapp.cab432.com` → CloudFront
 
-**Cluster:** `webapp-cluster`
+### SSL/TLS Certificates
 
-**Services:**
-1. **video-api-service**
-   - Task Definition: video-api:latest
-   - Desired Count: 1-5 (auto-scaling)
-   - CPU: 256 (.25 vCPU)
-   - Memory: 512 MB
-   - Port: 4000
-   - Health Check: GET /healthz
+#### ACM Certificates
+1. **ALB Certificate** (ap-southeast-2):
+   - ARN: arn:aws:acm:ap-southeast-2:901444280953:certificate/287c529f-3514-4283-9752-9f716540ff03
+   - Domain: *.n11817143-videoapp.cab432.com
+   - Validation: DNS
 
-2. **admin-service**
-   - Task Definition: admin-service:latest
-   - Desired Count: 1-3 (auto-scaling)
-   - CPU: 256 (.25 vCPU)
-   - Memory: 512 MB
-   - Port: 5000
-   - Health Check: GET /api/admin/health
+2. **CloudFront Certificate** (us-east-1):
+   - ARN: arn:aws:acm:us-east-1:901444280953:certificate/3e304793-a3b9-4d8d-9953-74f366cd3453
+   - Domain: *.n11817143-videoapp.cab432.com
+   - Validation: DNS
 
-3. **transcode-worker**
-   - Task Definition: transcode-worker:latest
-   - Desired Count: 1-10 (auto-scaling)
-   - CPU: 1024 (1 vCPU)
-   - Memory: 2048 MB (2 GB)
-   - No exposed ports (SQS consumer)
-
-4. **client-service**
-   - Task Definition: client:latest
-   - Desired Count: 1-2 (auto-scaling)
-   - CPU: 256 (.25 vCPU)
-   - Memory: 512 MB
-   - Port: 80 (Nginx)
-   - Health Check: GET /index.html
-
-### Application Load Balancer
-
-**Name:** `webapp-alb`
-
-**Listeners:**
-- Port 80 (HTTP)
-  - Default: Forward to client-target-group
-  - Path `/api/videos/*` → video-api-target-group
-  - Path `/api/auth/*` → video-api-target-group
-  - Path `/api/admin/*` → admin-target-group
-
-**Target Groups:**
-1. **video-api-target-group**
-   - Protocol: HTTP
-   - Port: 4000
-   - Health Check: /healthz
-   - Deregistration Delay: 30s
-
-2. **admin-target-group**
-   - Protocol: HTTP
-   - Port: 5000
-   - Health Check: /api/admin/health
-   - Deregistration Delay: 30s
-
-3. **client-target-group**
-   - Protocol: HTTP
-   - Port: 80
-   - Health Check: /index.html
-   - Deregistration Delay: 10s
-
-### Amazon DynamoDB
-
-**Tables:**
-
-1. **videos**
-   - Partition Key: `id` (String)
-   - Attributes: title, description, status, uploadedBy, urls, metadata, createdAt, updatedAt
-   - Billing: On-Demand
-   - Indexes: GSI on `uploadedBy`, GSI on `status`
-
-2. **users**
-   - Partition Key: `id` (String)
-   - Attributes: email, name, role, passwordHash, createdAt, lastLogin
-   - Billing: On-Demand
-   - Indexes: GSI on `email`
-
-### Amazon S3
-
-**Buckets:**
-
-1. **webapp-videos-bucket**
-   - Purpose: Video storage
-   - Structure:
-     ```
-     /videos/
-       /original/      - Original uploads
-       /transcoded/
-         /720p/        - 720p versions
-         /480p/        - 480p versions
-         /360p/        - 360p versions
-       /thumbs/        - Thumbnail images
-     ```
-   - Lifecycle: Glacier after 90 days (optional)
-   - Versioning: Enabled
-   - Encryption: AES-256
-
-2. **webapp-terraform-state**
-   - Purpose: Terraform state storage
-   - Versioning: Enabled
-   - Encryption: AES-256
-
-### Amazon SQS
-
-**Queue:** `transcode-queue.fifo`
-- Type: FIFO (First-In-First-Out)
-- Visibility Timeout: 600s
-- Message Retention: 4 days
-- Dead Letter Queue: `transcode-dlq.fifo`
-- Max Receive Count: 3
-
-### AWS Lambda
-
-**Function:** `s3-event-processor`
-- Runtime: Node.js 20.x (Container)
-- Memory: 256 MB
-- Timeout: 60s
-- Trigger: S3 ObjectCreated events
-- Environment: QUEUE_URL, AWS_REGION
-- IAM Role: s3:GetObject, sqs:SendMessage
-
-### Amazon ECR
-
-**Repositories:**
-1. video-api
-2. admin-service
-3. transcode-worker
-4. s3-lambda
-5. client
-
-Image Scanning: Enabled  
-Tag Immutability: Enabled
-
-### Amazon CloudWatch
-
-**Log Groups:**
-- /ecs/video-api
-- /ecs/admin-service
-- /ecs/transcode-worker
-- /ecs/client
-- /aws/lambda/s3-event-processor
-
-**Metrics:**
-- ECS: CPU, Memory, Network
-- ALB: RequestCount, TargetResponseTime, HTTPCode_Target_5XX
-- SQS: ApproximateNumberOfMessagesVisible, NumberOfMessagesSent
-- Lambda: Invocations, Duration, Errors
-
-**Alarms:**
-- High CPU (>80%)
-- High Memory (>80%)
-- High 5XX errors (>10 in 5 min)
-- Queue depth (>100 messages)
-- Lambda errors (>5 in 5 min)
-
----
-
-## Security Architecture
+## Security
 
 ### Network Security
-
-```
-Internet
-    │
-    ▼
-┌─────────────────┐
-│  Public Subnet  │
-│  - ALB          │  ← Public IP, Security Group: Allow 80/443 from 0.0.0.0/0
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Private Subnet  │
-│  - ECS Tasks    │  ← No public IP, Security Group: Allow 4000/5000/80 from ALB
-│  - Lambda       │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  AWS Services   │
-│  - DynamoDB     │  ← VPC Endpoints (optional)
-│  - S3           │  ← IAM roles, no direct access
-│  - SQS          │
-└─────────────────┘
-```
-
-### IAM Roles
-
-**ECS Task Execution Role:**
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "ecr:GetAuthorizationToken",
-        "ecr:BatchCheckLayerAvailability",
-        "ecr:GetDownloadUrlForLayer",
-        "ecr:BatchGetImage",
-        "logs:CreateLogStream",
-        "logs:PutLogEvents"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-```
-
-**Video API Task Role:**
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "dynamodb:GetItem",
-        "dynamodb:PutItem",
-        "dynamodb:UpdateItem",
-        "dynamodb:Query",
-        "dynamodb:Scan"
-      ],
-      "Resource": "arn:aws:dynamodb:*:*:table/videos"
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:PutObject",
-        "s3:GetObject"
-      ],
-      "Resource": "arn:aws:s3:::webapp-videos-bucket/*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "sqs:SendMessage"
-      ],
-      "Resource": "arn:aws:sqs:*:*:transcode-queue.fifo"
-    }
-  ]
-}
-```
-
-**Transcode Worker Task Role:**
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "sqs:ReceiveMessage",
-        "sqs:DeleteMessage",
-        "sqs:GetQueueAttributes"
-      ],
-      "Resource": "arn:aws:sqs:*:*:transcode-queue.fifo"
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:GetObject",
-        "s3:PutObject"
-      ],
-      "Resource": "arn:aws:s3:::webapp-videos-bucket/*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "dynamodb:UpdateItem"
-      ],
-      "Resource": "arn:aws:dynamodb:*:*:table/videos"
-    }
-  ]
-}
-```
+- All traffic encrypted (HTTPS/TLS 1.2+)
+- Security groups restrict access to known ports
+- ECS tasks in private subnets with NAT (optional)
+- S3 buckets not publicly accessible (presigned URLs only)
 
 ### Application Security
+- JWT-based authentication
+- Token verification on every API request
+- CORS configured for allowed origins only
+- Input validation with Zod schemas
+- SQL injection prevention (NoSQL database)
 
-**Authentication:**
-- JWT tokens (HS256 algorithm)
-- Token expiration: 24 hours
-- Refresh tokens: Not implemented (future)
-- Password hashing: bcrypt (10 rounds)
+### Secrets Management
+- JWT secrets in AWS Systems Manager Parameter Store
+- Environment variables via ECS task definitions
+- No secrets in code or Docker images
 
-**Authorization:**
-- Middleware: `requireAuth`, `requireAdmin`
-- Role-based access control (RBAC)
-- Resource ownership validation
+### IAM Roles
+- **ECS Task Execution Role**: Pull images from ECR, write logs
+- **ECS Task Role**: Access S3, DynamoDB, SQS, Cognito
+- **Principle of Least Privilege**: Each service has minimal permissions
 
-**Input Validation:**
-- Express Validator
-- File type validation (video uploads)
-- Size limits: 500MB per video
-- SQL injection prevention (NoSQL, parameterized)
-- XSS prevention (input sanitization)
+## Scalability
 
-**CORS:**
-```javascript
-{
-  origin: ['http://localhost:3000', 'http://<ALB_DNS>:3000'],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Authorization', 'Content-Type']
-}
-```
+### Auto-Scaling Configuration
 
----
+#### Video API
+- **Min**: 1 task
+- **Max**: 10 tasks
+- **Metric**: CPU utilization > 70%
+- **Scale-up**: Add 1 task when CPU > 70% for 2 minutes
+- **Scale-down**: Remove 1 task when CPU < 50% for 5 minutes
 
-## Scaling Strategy
+#### Admin Service
+- **Min**: 1 task
+- **Max**: 5 tasks
+- **Metric**: CPU utilization > 70%
 
-### Auto-Scaling Policies
+#### Transcode Worker
+- **Min**: 1 task
+- **Max**: 5 tasks
+- **Metric**: SQS queue depth > 10 messages
 
-**Video API Service:**
-1. **CPU-based scaling**
-   - Target: 70% CPU utilization
-   - Scale out: +1 task if CPU >70% for 2 minutes
-   - Scale in: -1 task if CPU <30% for 5 minutes
-   - Min: 1, Max: 5
+### Database Scalability
+- DynamoDB on-demand capacity
+- Automatic scaling based on traffic
+- No capacity planning required
 
-2. **Memory-based scaling**
-   - Target: 80% memory utilization
-   - Scale out: +1 task if Memory >80% for 2 minutes
-   - Scale in: -1 task if Memory <40% for 5 minutes
+### Storage Scalability
+- S3 unlimited storage
+- CloudFront caching reduces S3 load
 
-**Admin Service:**
-1. **CPU-based scaling**
-   - Target: 70% CPU utilization
-   - Min: 1, Max: 3
+## Monitoring
 
-**Transcode Worker:**
-1. **Queue depth scaling**
-   - Target: 5 messages per task
-   - Scale out: +1 task if queue depth >10
-   - Scale in: -1 task if queue depth <2
-   - Min: 1, Max: 10
+### Health Checks
+- **ALB Target Health**: Every 30s on `/healthz`
+- **ECS Service Health**: Task status monitoring
+- **Automatic Recovery**: Restart failed tasks
 
-2. **CPU-based scaling**
-   - Target: 80% CPU utilization (transcoding is CPU-intensive)
+### Metrics (Available)
+- ECS CPU/Memory utilization
+- ALB request count, latency, HTTP codes
+- DynamoDB read/write capacity
+- S3 request metrics
+- SQS queue depth
 
-### Capacity Planning
+### Logging
+- ECS tasks log to CloudWatch Logs
+- Log groups: `/ecs/{service-name}`
+- Retention: 7 days (configurable)
 
-| Load Level | Users | Videos/Day | Tasks Needed | Est. Cost |
-|------------|-------|------------|--------------|-----------|
-| **Light** | 0-100 | 0-10 | 1-2 per service | $65/mo |
-| **Medium** | 100-1000 | 10-100 | 2-5 per service | $143/mo |
-| **Heavy** | 1000-10000 | 100-1000 | 5-10 per service | $350/mo |
-| **Very Heavy** | 10000+ | 1000+ | 10-20 per service | $700+/mo |
+## Cost Optimization
 
----
+### Current Costs
+- **ECS Fargate**: ~$0.04/hour per task (based on CPU/memory)
+- **ALB**: ~$0.025/hour + $0.008 per LCU
+- **CloudFront**: $0.085/GB (first 10 TB)
+- **S3**: $0.025/GB storage + requests
+- **DynamoDB**: On-demand pricing
+
+### Optimization Strategies
+1. Scale services to 0 when not in use
+2. Use S3 lifecycle policies (archive old videos)
+3. Enable CloudFront caching (reduce S3 requests)
+4. Use DynamoDB reserved capacity (if predictable)
+5. Clean up old ECR images
+6. Delete SQS messages promptly
+
+## Deployment
+
+### Infrastructure as Code
+- **Tool**: Terraform 1.5+
+- **State**: Local (terraform.tfstate)
+- **Modules**:
+  - `alb` - Application Load Balancer
+  - `ecr` - Container registries
+  - `ecs-cluster` - ECS cluster
+  - `ecs-service` - Individual services
+  - `s3-static-website` - Frontend hosting
+
+### CI/CD (Manual)
+1. Build Docker images locally
+2. Push to ECR with `scripts/build-and-push.sh`
+3. ECS auto-deploys new images
+4. Frontend: Build + sync to S3 + invalidate CloudFront
 
 ## Disaster Recovery
 
 ### Backup Strategy
+- DynamoDB: Point-in-time recovery enabled
+- S3: Versioning enabled
+- Terraform state: Regular backups
 
-**DynamoDB:**
-- Point-in-time recovery: Enabled (last 35 days)
-- On-demand backups: Weekly (manual)
-- Cross-region replication: Not implemented (future)
-
-**S3:**
-- Versioning: Enabled
-- Cross-region replication: Not implemented (future)
-- Lifecycle: Transition to Glacier after 90 days
-
-**ECR:**
-- Image retention: Keep last 10 images
-- Backup: Images can be re-built from Git
-
-### Recovery Objectives
-
-| Metric | Target | Strategy |
-|--------|--------|----------|
-| **RTO** (Recovery Time) | <1 hour | Multi-AZ, auto-scaling, ALB health checks |
-| **RPO** (Recovery Point) | <5 minutes | DynamoDB PITR, S3 versioning |
-| **Availability** | 99.9% | Multi-AZ deployment |
-
-### Failure Scenarios
-
-**1. Single Task Failure:**
-- Detection: ALB health check fails
-- Response: ECS automatically replaces task
-- Impact: No downtime (other tasks handle traffic)
-
-**2. Service Degradation:**
-- Detection: CloudWatch CPU/Memory alarms
-- Response: Auto-scaling adds capacity
-- Impact: Slight latency increase
-
-**3. AZ Failure:**
-- Detection: Multiple health check failures
-- Response: ALB routes to healthy AZ
-- Impact: Reduced capacity, auto-scaling compensates
-
-**4. Database Failure:**
-- Detection: DynamoDB API errors
-- Response: AWS automatically fails over (Multi-AZ)
-- Impact: Brief interruption (<30s)
-
-**5. Complete Region Failure:**
-- Detection: Manual monitoring
-- Response: Terraform deploy to new region
-- Impact: Full outage until recovery (1-2 hours)
-
-### Monitoring & Alerting
-
-**Critical Alarms:**
-- 5XX errors >10 in 5 minutes → PagerDuty/Email
-- Service CPU >90% for 10 minutes → Email
-- Queue depth >100 messages → Email
-- Lambda errors >5 in 5 minutes → Email
-
-**Dashboards:**
-- CloudWatch: Service health, metrics
-- Container Insights: Task-level details
-- ALB Dashboard: Request rates, latencies
-
----
+### High Availability
+- Multi-AZ deployment (3 availability zones)
+- ALB distributes traffic across AZs
+- ECS Fargate automatically replaces failed tasks
+- S3 and DynamoDB are multi-AZ by default
 
 ## Future Enhancements
 
-### 1. Multi-Region Deployment
-- Active-active setup in 2+ regions
-- Route53 latency-based routing
-- Cross-region DynamoDB global tables
-- S3 cross-region replication
+1. **CI/CD Pipeline**: GitHub Actions for automated deployments
+2. **Monitoring Dashboard**: CloudWatch dashboards
+3. **Alerts**: SNS notifications for failures
+4. **CDN Optimization**: CloudFront cache tuning
+5. **Database Optimization**: DynamoDB indexes, streams
+6. **Video Analytics**: Track views, popular videos
+7. **Advanced Transcoding**: More formats, adaptive bitrate
+8. **User Profiles**: Avatar upload, preferences
+9. **Social Features**: Comments, likes, shares
+10. **Admin Dashboard**: Real-time monitoring, user management
 
-### 2. Content Delivery Network (CDN)
-- CloudFront distribution for videos
-- Edge caching (reduces S3 costs)
-- Faster video delivery globally
+## Conclusion
 
-### 3. Advanced Caching
-- ElastiCache Redis for sessions
-- API response caching
-- Video metadata caching
-
-### 4. Observability Improvements
-- AWS X-Ray distributed tracing
-- Custom CloudWatch metrics
-- APM tools (DataDog, New Relic)
-
-### 5. Enhanced Security
-- AWS WAF (Web Application Firewall)
-- AWS Shield (DDoS protection)
-- Secrets Manager for credentials
-- VPC Endpoints for AWS services
+This architecture provides a scalable, secure, and cost-effective solution for video processing on AWS. The use of managed services (Fargate, S3, DynamoDB, Cognito) reduces operational overhead, while the microservices pattern enables independent scaling and deployment of components.
 
 ---
 
-**Last Updated:** October 30, 2025  
-**Version:** 1.0  
-**Student:** n11817143
+**Last Updated**: October 30, 2025  
+**Version**: 5.0  
+**Author**: n11817143@qut.edu.au
