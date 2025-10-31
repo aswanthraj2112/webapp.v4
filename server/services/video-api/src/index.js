@@ -32,8 +32,17 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Health check endpoint
+// Health check endpoints
 app.get('/healthz', (req, res) => {
+    res.status(200).json({
+        status: 'healthy',
+        service: config.SERVICE_NAME,
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime()
+    });
+});
+
+app.get('/api/health', (req, res) => {
     res.status(200).json({
         status: 'healthy',
         service: config.SERVICE_NAME,
