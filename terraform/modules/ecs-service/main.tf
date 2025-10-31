@@ -90,6 +90,11 @@ resource "aws_ecs_service" "main" {
     }
   }
 
+  # Circuit Breaker for automatic rollback on deployment failures
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
 
   lifecycle {
     ignore_changes = [desired_count]

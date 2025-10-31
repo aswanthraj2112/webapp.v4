@@ -23,8 +23,8 @@ WORKDIR /app
 COPY server/shared ./server/shared
 COPY server/services/transcode-worker/src ./server/services/transcode-worker/src
 
-# Set working directory to service
-WORKDIR /app/server/services/transcode-worker
+# Set working directory to service (stay in /app to match relative imports)
+WORKDIR /app
 
 # Set environment variables
 ENV NODE_ENV=production
@@ -36,5 +36,5 @@ ENV SERVICE_NAME=transcode-worker
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
     CMD ps aux | grep -v grep | grep -q node || exit 1
 
-# Start the worker
-CMD ["node", "src/index.js"]
+# Start the worker from the correct directory
+CMD ["node", "server/services/transcode-worker/src/index.js"]

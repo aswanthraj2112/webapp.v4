@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document provides a comprehensive overview of the video processing application's architecture, deployed on AWS using a microservices pattern with ECS Fargate.
+This document provides a comprehensive overview of the video processing application's architecture, deployed on AWS using a microservices pattern with ECS Fargate and AWS Lambda. The application consists of **5 independent microservices**: Frontend (React SPA), Video API, Admin Service, Lambda Function (S3→SQS), and Transcode Worker.
 
 ## Table of Contents
 
@@ -65,15 +65,32 @@ This document provides a comprehensive overview of the video processing applicat
     │                                                                          │
     │  ┌─────────────┐  ┌──────────────┐  ┌──────────┐  ┌────────┐  ┌─────┐│
     │  │  Amazon     │  │  Amazon      │  │ Amazon  │  │ Amazon │  │ ECR ││
-    │  │  Cognito    │  │  DynamoDB    │  │   S3    │  │  SQS   │  │     ││
-    │  │  (Auth)     │  │  (Metadata)  │  │(Videos) │  │(Queue) │  │     ││
-    │  │             │  │              │  │         │  │        │  │     ││
-    │  │ User Pool:  │  │ Table:       │  │ Bucket: │  │ Queue: │  │ 3   ││
-    │  │ n11817143-a2│  │ n11817143-a2 │  │n11817143│  │transcode│ │repos││
+    │  │  Cognito    │  │  DynamoDB    │  │   S3    │◄─┤ Lambda │  │     ││
+    │  │  (Auth)     │  │  (Metadata)  │  │(Videos) │  │ (S3→   │  │     ││
+    │  │             │  │              │  │         │  │  SQS)  │  │     ││
+    │  │ User Pool:  │  │ Table:       │  │ Bucket: │  │Function│  │ 4   ││
+    │  │ n11817143-a2│  │ n11817143-a2 │  │n11817143│  │ ✅NEW │  │repos││
     │  │             │  │              │  │   -a2   │  │        │  │     ││
-    │  └─────────────┘  └──────────────┘  └──────────┘  └────────┘  └─────┘│
-    │                                                                          │
+    │  └─────────────┘  └──────────────┘  └────┬─────┘  └───┬────┘  └─────┘│
+    │                                           │            │               │
+    │                                           │ S3 Event   │ SQS Message   │
+    │                                           └────────────┘               │
+    │                                                 ↓                       │
+    │                                          ┌────────────┐                │
+    │                                          │  Amazon    │                │
+    │                                          │    SQS     │                │
+    │                                          │  (Queue)   │                │
+    │                                          │            │                │
+    │                                          │  Queue:    │                │
+    │                                          │n11817143-A3│                │
+    │                                          └──────┬─────┘                │
+    │                                                 │                       │
+    │                                                 │ Long Polling          │
+    │                                                 └──────────────────────►│
+    │                                              Transcode Worker           │
     └──────────────────────────────────────────────────────────────────────────┘
+
+    🎯 5 Microservices: Frontend | Video API | Admin | Lambda ✅ | Transcode Worker
 ```
 
 ## Components
@@ -218,6 +235,60 @@ Image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11817143-app/transcode
 5. Upload to S3: `transcoded/{videoId}/{resolution}.mp4`
 6. Update DynamoDB with transcode status
 7. Delete SQS message
+
+#### Lambda Function (S3 to SQS) ✅ NEW
+```
+Name: n11817143-app-s3-to-sqs
+Runtime: Container Image (Node.js 18)
+Memory: 256 MB
+Timeout: 30 seconds
+Role: CAB432-Lambda-Role
+Image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11817143-app/s3-to-sqs-lambda:latest
+```
+
+**Responsibilities**:
+- Listen for S3 ObjectCreated events
+- Validate video file extensions
+- Extract userId from S3 key pattern
+- Generate/extract videoId
+- Send transcode job message to SQS queue
+
+**Trigger**:
+- S3 Event: `s3:ObjectCreated:*`
+- Prefix Filter: `raw/`
+- Bucket: n11817143-a2
+
+**Process**:
+1. S3 triggers Lambda on file upload to `raw/` prefix
+2. Lambda validates file is a video (.mp4, .mov, .avi, .mkv, .webm, .flv)
+3. Extracts userId from S3 key: `raw/{userId}/{filename}`
+4. Generates or extracts videoId from filename
+5. Creates transcode job message:
+   ```json
+   {
+     "userId": "user123",
+     "videoId": "uuid",
+     "originalS3Key": "raw/user123/video.mp4",
+     "resolution": "720p",
+     "bucket": "n11817143-a2",
+     "fileSize": 83517,
+     "timestamp": "2025-10-30T21:23:00.026Z",
+     "eventName": "ObjectCreated:Put"
+   }
+   ```
+6. Sends message to SQS queue (n11817143-A3)
+7. Returns success/failure status
+
+**Environment Variables**:
+- `TRANSCODE_QUEUE_URL`: https://sqs.ap-southeast-2.amazonaws.com/901444280953/n11817143-A3
+- `AWS_REGION`: Automatically set by Lambda runtime
+
+**Benefits**:
+- Event-driven architecture (no polling needed)
+- Decouples upload from transcode queueing
+- Serverless (no server management)
+- Scales automatically with S3 events
+- Cost-effective (pay only per execution)
 
 ### 4. Storage Layer
 

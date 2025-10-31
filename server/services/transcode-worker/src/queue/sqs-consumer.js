@@ -1,5 +1,5 @@
 import { SQSClient, ReceiveMessageCommand, DeleteMessageCommand } from '@aws-sdk/client-sqs';
-import config from '../../../shared/config/index.js';
+import config from '../../../../shared/config/index.js';
 
 const sqsClient = new SQSClient({ region: config.AWS_REGION });
 
@@ -104,8 +104,11 @@ class SQSConsumer {
 
         } catch (error) {
             console.error(`❌ Error processing message ${messageId}:`, error);
+            console.error(`📋 Message body:`, JSON.stringify(messageBody, null, 2));
+            console.error(`⚠️  Message will be retried. After max retries, it will move to DLQ.`);
             // Message will become visible again after visibility timeout
-            // and can be retried or sent to DLQ
+            // and can be retried or sent to DLQ based on queue's redrive policy
+            // Do NOT delete the message - let SQS handle retry logic and DLQ
         }
     }
 

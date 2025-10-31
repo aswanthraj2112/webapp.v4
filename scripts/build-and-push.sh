@@ -76,22 +76,22 @@ for SERVICE in "${SERVICES[@]}"; do
     
     case $SERVICE in
         video-api)
-            REPO="${ECR_REGISTRY}/n11817143-videoapp/video-api"
+            REPO="${ECR_REGISTRY}/n11817143-app/video-api"
             BUILD_PATH="./server/services/video-api"
             DOCKERFILE="Dockerfile"
             ;;
         admin-service)
-            REPO="${ECR_REGISTRY}/n11817143-videoapp/admin-service"
+            REPO="${ECR_REGISTRY}/n11817143-app/admin-service"
             BUILD_PATH="./server/services/admin-service"
             DOCKERFILE="Dockerfile"
             ;;
         transcode-worker)
-            REPO="${ECR_REGISTRY}/n11817143-videoapp/transcode-worker"
+            REPO="${ECR_REGISTRY}/n11817143-app/transcode-worker"
             BUILD_PATH="./server/services/transcode-worker"
             DOCKERFILE="Dockerfile"
             ;;
         s3-lambda)
-            REPO="${ECR_REGISTRY}/n11817143-videoapp/s3-to-sqs-lambda"
+            REPO="${ECR_REGISTRY}/n11817143-app/s3-to-sqs-lambda"
             BUILD_PATH="./lambda/s3-to-sqs"
             DOCKERFILE="Dockerfile"
             ;;
@@ -109,14 +109,13 @@ for SERVICE in "${SERVICES[@]}"; do
     
     # Build image
     print_info "Building Docker image..."
-    if [ "$SERVICE" == "video-api" ] || [ "$SERVICE" == "transcode-worker" ]; then
-        # Copy shared directory for services that need it
-        print_info "Copying shared utilities..."
-        mkdir -p "${BUILD_PATH}/shared"
-        cp -r ./server/shared/* "${BUILD_PATH}/shared/"
+    if [ "$SERVICE" == "transcode-worker" ] || [ "$SERVICE" == "video-api" ] || [ "$SERVICE" == "admin-service" ]; then
+        # Build from project root for services that need shared code
+        docker build -t ${REPO}:latest -f ${BUILD_PATH}/${DOCKERFILE} .
+    else
+        # Build from service directory for standalone services
+        docker build -t ${REPO}:latest -f ${BUILD_PATH}/${DOCKERFILE} ${BUILD_PATH}
     fi
-    
-    docker build -t ${REPO}:latest -f ${BUILD_PATH}/${DOCKERFILE} ${BUILD_PATH}
     
     if [ $? -eq 0 ]; then
         print_success "Built $SERVICE"
@@ -140,11 +139,6 @@ for SERVICE in "${SERVICES[@]}"; do
         echo "  - ${REPO}:${TIMESTAMP}"
     else
         print_error "Failed to push $SERVICE"
-    fi
-    
-    # Clean up copied shared directory
-    if [ "$SERVICE" == "video-api" ] || [ "$SERVICE" == "transcode-worker" ]; then
-        rm -rf "${BUILD_PATH}/shared"
     fi
     
     echo ""

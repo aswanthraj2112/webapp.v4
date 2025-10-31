@@ -5,8 +5,8 @@ import { writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, dirname } from 'path';
 import { randomUUID } from 'crypto';
-import config from '../../../shared/config/index.js';
-import { AppError } from '../../../shared/utils/errors.js';
+import config from '../../../../shared/config/index.js';
+import { AppError } from '../../../../shared/utils/errors.js';
 import { updateVideoTranscoding } from './video.repo.js';
 
 const s3 = new S3Client({ region: config.AWS_REGION });

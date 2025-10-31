@@ -103,6 +103,15 @@ data "aws_cognito_user_pool_client" "existing" {
 }
 
 # ==========================================
+# S3 Bucket (Videos Storage)
+# ==========================================
+
+# Reference existing S3 bucket for videos
+data "aws_s3_bucket" "videos" {
+  bucket = var.s3_bucket_name
+}
+
+# ==========================================
 # Security Groups
 # ==========================================
 
@@ -289,7 +298,7 @@ module "transcode_worker" {
   aws_region         = var.aws_region
   cluster_id         = module.ecs_cluster.cluster_id
   cluster_name       = module.ecs_cluster.cluster_name
-  container_image    = "${module.ecr.transcode_worker_repository_url}:${var.transcode_worker_image_tag}"
+  container_image    = "${module.ecr.transcode_worker_repository_url}:latest"
   container_port     = 0 # No port - worker doesn't accept connections
   task_cpu           = var.transcode_worker_cpu
   task_memory        = var.transcode_worker_memory
@@ -306,7 +315,7 @@ module "transcode_worker" {
     AWS_REGION             = var.aws_region
     DYNAMODB_TABLE_NAME    = var.dynamodb_table_name
     S3_BUCKET_NAME         = var.s3_bucket_name
-    SQS_QUEUE_URL          = "https://sqs.${var.aws_region}.amazonaws.com/${local.account_id}/${var.sqs_queue_name}"
+    TRANSCODE_QUEUE_URL    = "https://sqs.${var.aws_region}.amazonaws.com/${local.account_id}/${var.sqs_queue_name}"
     SQS_WAIT_TIME_SECONDS  = "20"
     SQS_VISIBILITY_TIMEOUT = "600"
     SQS_MAX_MESSAGES       = "1"
@@ -338,4 +347,87 @@ module "static_website" {
   cloudfront_aliases  = ["app.${var.domain_name}"]
   create_oac          = false
   existing_oac_id     = "E2H9DXFI7YLTIM"  # Reuse existing OAC from account
+}
+
+# ==========================================
+# SQS Dead Letter Queue
+# ==========================================
+
+# Dead Letter Queue for failed transcode jobs
+resource "aws_sqs_queue" "transcode_dlq" {
+  name                       = "${var.sqs_queue_name}-dlq"
+  message_retention_seconds  = 1209600  # 14 days (maximum)
+  visibility_timeout_seconds = 30
+
+  tags = {
+    Name        = "${var.project_name}-transcode-dlq"
+    Project     = var.project_name
+    Environment = var.environment
+    Purpose     = "Dead Letter Queue for failed transcode jobs"
+  }
+}
+
+# Reference to existing main SQS queue (managed outside Terraform)
+# We add the DLQ configuration via AWS CLI after Terraform creates the DLQ
+data "aws_sqs_queue" "main_queue" {
+  name = var.sqs_queue_name
+}
+
+# CloudWatch Alarm for DLQ messages
+resource "aws_cloudwatch_metric_alarm" "dlq_messages" {
+  alarm_name          = "${var.project_name}-transcode-dlq-messages"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = "1"
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  namespace           = "AWS/SQS"
+  period              = "300"  # 5 minutes
+  statistic           = "Average"
+  threshold           = "0"
+  alarm_description   = "Alert when messages accumulate in the Dead Letter Queue"
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    QueueName = aws_sqs_queue.transcode_dlq.name
+  }
+
+  tags = {
+    Name        = "${var.project_name}-dlq-alarm"
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}
+
+# ==========================================
+# Lambda Function (S3 to SQS)
+# ==========================================
+
+module "s3_to_sqs_lambda" {
+  source = "./modules/lambda"
+
+  function_name = "${var.project_name}-s3-to-sqs"
+  image_uri     = "${module.ecr.s3_lambda_repository_url}:latest"
+  
+  # Use existing Lambda execution role (CAB432 pre-created)
+  lambda_execution_role_arn = "arn:aws:iam::901444280953:role/CAB432-Lambda-Role"
+  
+  # SQS Queue configuration
+  queue_url = "https://sqs.${var.aws_region}.amazonaws.com/${local.account_id}/${var.sqs_queue_name}"
+  queue_arn = "arn:aws:sqs:${var.aws_region}:${local.account_id}:${var.sqs_queue_name}"
+  
+  # S3 Bucket configuration
+  s3_bucket_id  = data.aws_s3_bucket.videos.id
+  s3_bucket_arn = data.aws_s3_bucket.videos.arn
+  
+  # Lambda configuration
+  timeout     = 30
+  memory_size = 256
+  
+  # Environment variables
+  environment_variables = {
+    TRANSCODE_QUEUE_URL = "https://sqs.${var.aws_region}.amazonaws.com/${local.account_id}/${var.sqs_queue_name}"
+    # Note: AWS_REGION is automatically set by Lambda runtime, don't override
+  }
+  
+  aws_region = var.aws_region
+  tags       = local.common_tags
 }

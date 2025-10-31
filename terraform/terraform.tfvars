@@ -33,7 +33,7 @@ log_retention_days        = 7
 
 s3_bucket_name      = "n11817143-a2"
 dynamodb_table_name = "n11817143-VideoApp"
-sqs_queue_name      = "n11817143-transcode-queue"
+sqs_queue_name      = "n11817143-A3"
 
 cognito_user_pool_id = "ap-southeast-2_CdVnmKfW"
 cognito_client_id    = "1dnnr9c18vuk983t8iojkgd8e"
