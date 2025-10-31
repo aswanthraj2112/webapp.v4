@@ -117,11 +117,15 @@ Located in `server/`:
 ### AWS Resources
 - **ECS Cluster**: n11817143-app-cluster
 - **ALB**: n11817143-app-alb
-- **Cognito User Pool**: n11817143-a2 (ap-southeast-2_CdVnmKfrW)
+- **Cognito User Pool**: ap-southeast-2_CdVnmKfW
+- **Cognito Client ID**: 296uu7cjlfinpnspc04kp53p83
 - **S3 Bucket (Videos)**: n11817143-a2
-- **S3 Bucket (Frontend)**: n11817143-app-static-website
-- **CloudFront Distribution**: E3MBOUQVWZEHJQ
-- **DynamoDB Table**: n11817143-a2
+- **S3 Bucket (Frontend)**: n11817143-app-static-website-prod
+- **CloudFront Distribution**: E3MBOUQVWZEHJQ (or check Terraform outputs)
+- **DynamoDB Table**: n11817143-VideoApp
+- **SQS Queue**: n11817143-A3
+- **SQS DLQ**: n11817143-A3-dlq
+- **Lambda Function**: n11817143-app-s3-to-sqs
 
 ### Key Commands
 
@@ -137,8 +141,8 @@ cd terraform && terraform apply
 
 # Deploy frontend
 cd client && npm run build && \
-aws s3 sync dist/ s3://n11817143-app-static-website/ --delete && \
-aws cloudfront create-invalidation --distribution-id E3MBOUQVWZEHJQ --paths "/*"
+aws s3 sync dist/ s3://n11817143-app-static-website-prod/ --delete && \
+aws cloudfront create-invalidation --distribution-id $(terraform -chdir=../terraform output -raw cloudfront_distribution_id) --paths "/*"
 
 # Check ECS services
 aws ecs describe-services --cluster n11817143-app-cluster \
@@ -211,12 +215,11 @@ README.md (Start Here)
 ## 📝 Document Maintenance
 
 ### Last Updated
-- **README.md**: October 30, 2025
-- **ARCHITECTURE.md**: October 30, 2025
-- **DEPLOYMENT_GUIDE.md**: October 30, 2025
-- **API_REFERENCE.md**: Earlier (may need updates)
-- **FILE_STRUCTURE.md**: October 30, 2025
-- **DOCUMENTATION_INDEX.md**: October 30, 2025
+- **README.md**: October , 2025
+- **ARCHITECTURE.md**: October, 2025
+- **DEPLOYMENT_GUIDE.md**: October , 2025
+- **API_REFERENCE.md**: October , 2025
+- **DOCUMENTATION_INDEX.md**: October , 2025
 
 ### Version
 - Project Version: **5.0**

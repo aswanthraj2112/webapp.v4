@@ -8,7 +8,8 @@ Complete API documentation for the Video Platform microservices.
 
 | Environment | URL |
 |-------------|-----|
-| **Production** | `http://<ALB_DNS>` |
+| **Production** | `https://n11817143-videoapp.cab432.com` |
+| **API Base** | `https://n11817143-videoapp.cab432.com/api` |
 | **Local** | `http://localhost:8080` |
 
 ---

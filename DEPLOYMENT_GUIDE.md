@@ -44,11 +44,12 @@ cd terraform
 cat terraform.tfvars
 
 # Ensure these values are correct:
-# - cognito_user_pool_id = "ap-southeast-2_CdVnmKfrW"
+# - cognito_user_pool_id = "ap-southeast-2_CdVnmKfW"
 # - cognito_client_id = "296uu7cjlfinpnspc04kp53p83"
 # - domain_name = "n11817143-videoapp.cab432.com"
-# - dynamodb_table_name = "n11817143-a2"
+# - dynamodb_table_name = "n11817143-VideoApp"
 # - s3_bucket_name = "n11817143-a2"
+# - sqs_queue_name = "n11817143-A3"
 ```
 
 ## Step 4: Deploy Infrastructure
@@ -69,25 +70,28 @@ terraform output > outputs.txt
 
 ### What Gets Created:
 - ✅ ECS Cluster (n11817143-app-cluster)
-- ✅ Application Load Balancer
-- ✅ 3 ECR repositories (video-api, admin-service, transcode-worker)
-- ✅ 3 ECS Services (Fargate)
-- ✅ S3 bucket for frontend (n11817143-app-static-website)
+- ✅ Application Load Balancer (n11817143-app-alb)
+- ✅ 4 ECR repositories (video-api, admin-service, transcode-worker, s3-to-sqs-lambda)
+- ✅ 3 ECS Services (Video API, Admin Service, Transcode Worker)
+- ✅ 1 Lambda Function (S3-to-SQS)
+- ✅ S3 bucket for frontend (n11817143-app-static-website-prod)
 - ✅ CloudFront distribution
 - ✅ Route53 DNS records
+- ✅ SQS Dead Letter Queue (n11817143-A3-dlq)
 
 ## Step 5: Build and Push Docker Images
 
 ```bash
 cd ..
 
-# Build and push all services
+# Build and push all services (including Lambda)
 ./scripts/build-and-push.sh all
 
 # Or build individually:
 # ./scripts/build-and-push.sh video-api
 # ./scripts/build-and-push.sh admin-service
 # ./scripts/build-and-push.sh transcode-worker
+# ./scripts/build-and-push.sh s3-lambda
 ```
 
 This step:

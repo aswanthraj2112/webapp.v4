@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document provides a comprehensive overview of the video processing application's architecture, deployed on AWS using a microservices pattern with ECS Fargate and AWS Lambda. The application consists of **5 independent microservices**: Frontend (React SPA), Video API, Admin Service, Lambda Function (S3→SQS), and Transcode Worker.
+This document provides a comprehensive overview of the video processing application's architecture, deployed on AWS using a microservices pattern with ECS Fargate and AWS Lambda. The application consists of **3 core microservices** (Video API, Admin Service, Transcode Worker) plus **1 Lambda function** (S3→SQS), with a React SPA frontend served via CloudFront/S3.
 
 ## Table of Contents
 
@@ -56,7 +56,7 @@ This document provides a comprehensive overview of the video processing applicat
               │  ECS Service     │   │  ECS Service     │  │  Worker          │
               │  Port: 8080      │   │  Port: 8080      │  │  ECS Service     │
               │  Path: /api/*    │   │  Path: /api/admin│  │  No ALB          │
-              │  Tasks: 1-10     │   │  Tasks: 1-5      │  │  Tasks: 1-5      │
+              │  Tasks: 1-5      │   │  Tasks: 1-3      │  │  Tasks: 0-10     │
               └──────────┬───────┘   └──────────┬───────┘  └──────────┬───────┘
                          │                       │                     │
                          │   AWS Fargate (Serverless Container Platform)
@@ -90,7 +90,7 @@ This document provides a comprehensive overview of the video processing applicat
     │                                              Transcode Worker           │
     └──────────────────────────────────────────────────────────────────────────┘
 
-    🎯 5 Microservices: Frontend | Video API | Admin | Lambda ✅ | Transcode Worker
+    🎯 3 Microservices + 1 Lambda: Video API | Admin Service | Transcode Worker | S3→SQS Lambda
 ```
 
 ## Components
@@ -160,7 +160,7 @@ Name: n11817143-app-video-api
 Port: 8080
 CPU: 512 (0.5 vCPU)
 Memory: 1024 MB
-Tasks: 1 (Desired), 1-10 (Auto-scaling)
+Tasks: 2 (Desired), 1-5 (Auto-scaling)
 Image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11817143-app/video-api:latest
 ```
 
@@ -182,20 +182,20 @@ Image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11817143-app/video-api
 - `DELETE /api/videos/:id` - Delete video
 
 **Environment Variables**:
-- `COGNITO_USER_POOL_ID`: ap-southeast-2_CdVnmKfrW
+- `COGNITO_USER_POOL_ID`: ap-southeast-2_CdVnmKfW
 - `COGNITO_CLIENT_ID`: 296uu7cjlfinpnspc04kp53p83
-- `DYNAMODB_TABLE_NAME`: n11817143-a2
+- `DYNAMODB_TABLE_NAME`: n11817143-VideoApp
 - `S3_BUCKET_NAME`: n11817143-a2
-- `SQS_QUEUE_URL`: Transcode queue URL
+- `SQS_QUEUE_URL`: https://sqs.ap-southeast-2.amazonaws.com/901444280953/n11817143-A3
 - `CLIENT_ORIGINS`: CORS allowed origins
 
 #### Admin Service
 ```
 Name: n11817143-app-admin-service
 Port: 8080
-CPU: 512 (0.5 vCPU)
-Memory: 1024 MB
-Tasks: 1 (Desired), 1-5 (Auto-scaling)
+CPU: 256 (0.25 vCPU)
+Memory: 512 MB
+Tasks: 1 (Desired), 1-3 (Auto-scaling)
 Image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11817143-app/admin-service:latest
 ```
 
@@ -215,7 +215,7 @@ Image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11817143-app/admin-ser
 Name: n11817143-app-transcode-worker
 CPU: 1024 (1 vCPU)
 Memory: 2048 MB
-Tasks: 1 (Desired), 1-5 (Auto-scaling)
+Tasks: 1 (Desired), 0-10 (Auto-scaling, can scale to zero)
 Image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11817143-app/transcode-worker:latest
 ```
 
@@ -228,15 +228,15 @@ Image: 901444280953.dkr.ecr.ap-southeast-2.amazonaws.com/n11817143-app/transcode
 - Delete SQS message on completion
 
 **Process**:
-1. Listen to SQS queue
-2. Receive message with video ID
+1. Listen to SQS queue (long polling, 20 seconds)
+2. Receive message with video metadata
 3. Download raw video from S3
-4. Transcode to multiple resolutions
-5. Upload to S3: `transcoded/{videoId}/{resolution}.mp4`
+4. Transcode to 720p with FFmpeg
+5. Upload to S3: `transcoded/{videoId}/720p.mp4`
 6. Update DynamoDB with transcode status
-7. Delete SQS message
+7. Delete SQS message on completion
 
-#### Lambda Function (S3 to SQS) ✅ NEW
+#### Lambda Function (S3 to SQS)
 ```
 Name: n11817143-app-s3-to-sqs
 Runtime: Container Image (Node.js 18)
